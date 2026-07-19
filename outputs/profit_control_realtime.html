@@ -1,0 +1,126 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Profit Control 即時動態模擬</title>
+  <style>
+    :root { color-scheme: light; font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+    body { margin: 0; background: #f5f7fb; color: #172033; }
+    main { max-width: 1240px; margin: 0 auto; padding: 24px; }
+    h1 { margin: 0 0 6px; font-size: 26px; }
+    .intro { color: #596579; margin: 0 0 18px; }
+    .panel { background: white; border: 1px solid #dfe5ef; border-radius: 12px; padding: 16px; box-shadow: 0 3px 14px #22304a0d; }
+    .controls { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; align-items: end; }
+    label { display: grid; gap: 5px; font-size: 13px; color: #596579; }
+    input { width: 100%; box-sizing: border-box; padding: 8px 9px; border: 1px solid #cbd4e2; border-radius: 7px; font-size: 14px; color: #172033; }
+    .actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
+    button { border: 0; border-radius: 7px; padding: 9px 14px; cursor: pointer; background: #2563eb; color: white; font-size: 14px; }
+    button.secondary { background: #64748b; }
+    button:disabled { opacity: .5; cursor: not-allowed; }
+    #status { margin: 13px 0 0; color: #475569; font-size: 14px; min-height: 20px; }
+    canvas { display: block; width: 100%; height: auto; margin-top: 16px; border: 1px solid #e4e9f1; border-radius: 8px; background: #fff; }
+    .result { margin-top: 16px; overflow-x: auto; }
+    table { border-collapse: collapse; min-width: 620px; width: 100%; font-size: 13px; }
+    th, td { border-bottom: 1px solid #e8edf4; text-align: right; padding: 7px 9px; }
+    th { background: #f8fafc; color: #475569; }
+    th:first-child, td:first-child { text-align: left; }
+    .note { color: #64748b; font-size: 13px; line-height: 1.55; margin-top: 14px; }
+  </style>
+</head>
+<body>
+<main>
+  <h1>Profit Control 即時動態模擬</h1>
+  <p class="intro">每個 cycle 計算一次商戶投注，並立即更新商戶 profit rate 與當期投注圖。</p>
+  <section class="panel">
+    <div class="controls">
+      <label>lowerbounds（單值或逗號分隔）<input id="lower" value="0.0"></label>
+      <label>upperbounds（單值或逗號分隔）<input id="upper" value="0.03"></label>
+      <label>runclients<input id="clients" type="number" min="1" value="10"></label>
+      <label>cycles<input id="cycles" type="number" min="1" value="500"></label>
+      <label>controlrate（0–100%）<input id="control" type="number" min="0" max="100" step="0.1" value="0"></label>
+      <label>seed（可留白）<input id="seed" type="number" placeholder="random"></label>
+      <label>每步延遲 ms<input id="delay" type="number" min="0" value="35"></label>
+    </div>
+    <div class="actions">
+      <button id="start">開始／重新開始</button>
+      <button id="pause" class="secondary">暫停</button>
+      <button id="one" class="secondary">單步</button>
+      <button id="csv" class="secondary" disabled>下載 CSV</button>
+    </div>
+    <div id="status">尚未開始。</div>
+  </section>
+  <canvas id="chart" width="1160" height="700"></canvas>
+  <section class="panel result">
+    <table id="table"><thead><tr><th>Merchant</th><th>Final profit rate</th><th>Latest bets</th><th>Accumulated bets</th></tr></thead><tbody></tbody></table>
+  </section>
+  <p class="note">模型保留原始程式的投注生成、wanted / unwanted / blacked 評分與 controlrate 選點流程。瀏覽器版本使用 Canvas 繪圖，不需安裝套件或載入外部網路資源。</p>
+</main>
+<script>
+'use strict';
+const N = 100, INTERVAL = 30, ENHANCED = 2, UL = -0.05, HUL = -8;
+const $ = id => document.getElementById(id);
+const sum = a => a.reduce((x, y) => x + y, 0);
+const mean = a => a.length ? sum(a) / a.length : 0;
+function mulberry32(seed) { return function() { let t = seed += 0x6D2B79F5; t = Math.imul(t ^ t >>> 15, t | 1); t ^= t + Math.imul(t ^ t >>> 7, t | 61); return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+function rngFor(seed) { return seed === null ? Math.random : mulberry32(seed >>> 0); }
+function ri(rng, lo, hi) { return Math.floor(rng() * (hi - lo)) + lo; }
+function pick(rng, a) { return a[Math.floor(rng() * a.length)]; }
+function shuffle(rng, a) { for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(rng() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; }
+function sample(rng, a, n, replacement = false) { const out = []; if (replacement) { for (let i = 0; i < n; i++) out.push(pick(rng, a)); return out; } const copy = a.slice(); shuffle(rng, copy); return copy.slice(0, n); }
+function parseBound(text, n) { const v = String(text).replaceAll(';', ',').split(',').map(x => Number(x.trim())).filter(Number.isFinite); if (!v.length) throw new Error('bound 必須至少有一個數字'); if (v.length === 1) return Array(n).fill(v[0]); if (v.length !== n) throw new Error(`bound 必須是單值或 ${n} 個數字`); return v; }
+function around(c, poles) { return poles.some(p => c < p + INTERVAL / 2 && c > p - INTERVAL / 2); }
+function avgSq(a, c) { return a.length ? sum(a.map(x => (x - c) ** 2)) / a.length : 0; }
+function targetFunction(values) { if (values.length > 50) values = values.slice(-50); if (values.length < 3) return mean(values); const b = values.slice().sort((x,y) => x-y), M = b[b.length-1], m = b[0], c = b.slice(); c.splice(c.indexOf(M),1); c.splice(c.indexOf(m),1); const target = {}; const av = mean(values); for (let i=0; i<c.length-2; i++) for (let j=1; j<c.length-i-1; j++) target[`${i},${j}`] = avgSq(c.slice(0,i+1),m) + avgSq(c.slice(i+1,i+j+1),av) + avgSq(c.slice(i+j+1),M); const keys = Object.keys(target); if (!keys.length) return mean(values); const key = keys.reduce((x,y) => target[x] <= target[y] ? x : y), ij = key.split(',').map(Number); const groups = [c.slice(0,ij[0]+1).concat([m]), c.slice(ij[0]+1,ij[0]+ij[1]+1), c.slice(ij[0]+ij[1]+1).concat([M])]; return mean(groups.reduce((x,y) => y.length > x.length ? y : x, [])); }
+function targetBeta(values) { if (values.length < 3) return mean(values); const b = values.slice().sort((x,y) => x-y), M=b[b.length-1], m=b[0], c=b.slice(); c.splice(c.indexOf(M),1); c.splice(c.indexOf(m),1); const target=[]; for (let i=0; i<c.length-1; i++) target[i] = avgSq(c.slice(0,i+1),m) + avgSq(c.slice(i+1),M); if (!target.length) return mean(values); let ix=0; for (let i=1;i<target.length;i++) if (target[i]<target[ix]) ix=i; return mean(c.slice(ix+1)) || mean(values); }
+
+class SimulationState {
+  constructor(cfg) {
+    this.n = cfg.clients; this.cycles = cfg.cycles; this.controlrate = cfg.controlrate;
+    this.lower = parseBound(cfg.lower, this.n); this.upper = parseBound(cfg.upper, this.n);
+    this.rng = rngFor(cfg.seed); this.c = 0; this.actualControl = 0;
+    this.source = Array.from({length:N}, (_,i)=>i); this.chance = [0,0,0,0,0,0,0,0,0,1];
+    const blank = () => Array.from({length:this.n}, () => []); const zeros = () => Array(this.n).fill(0);
+    this.collectivebets=blank(); this.collectivebonus=blank(); this.collectiveCPbets=blank(); this.collectiveCPbonus=blank(); this.spikes=blank(); this.deviation=zeros(); this.accubets=zeros(); this.accubonus=zeros(); this.profitrate=blank(); this.cprtp=blank(); this.cpBets=zeros(); this.cpBonus=zeros();
+    this.drift=[]; this.driftPull=1; this.cpd=Array.from({length:this.n},()=>ri(this.rng,0,this.cycles));
+    const poleCount = Math.floor(this.cycles / INTERVAL * .7), cycleSource = Array.from({length:this.cycles},(_,i)=>i); this.poles=Array.from({length:this.n},()=>sample(this.rng,cycleSource,poleCount).sort((a,b)=>a-b));
+    this.latestBets=zeros(); this.latestRates=zeros(); this.accumulatedBets=zeros(); this.history=[];
+  }
+  rankings() { return Array.from({length:this.n},(_,i)=>i).sort((a,b)=>this.accubets[b]-this.accubets[a]).slice(0,Math.floor(this.n/10)); }
+  makeBets(c,j) {
+    const betnumbers=sample(this.rng,this.source,ri(this.rng,43,63)); const locating=Array(N).fill(0); const level=shuffle(this.rng,[0,1]); const sales=level[0]+2*level[1];
+    for (const i of betnumbers) { const wave=Math.round(Math.abs(2+Math.sin((c-i-this.cpd[j])*2*Math.PI/this.cycles))*100)/100; if (around(c,this.poles[j])) locating[i] += (pick(this.rng,this.chance)===0 ? ri(this.rng,4,100) : ri(this.rng,4,10)*100) * sales * wave; else locating[i] += ri(this.rng,4,10)*5*sales*wave; }
+    const specific=Array(N).fill(0); const specificNumbers=sample(this.rng,this.source,ri(this.rng,10,100),true); for (const i of specificNumbers) specific[i] += ri(this.rng,4,10)*sales; for(let i=0;i<N;i++) locating[i]+=specific[i]; return {locating,specific};
+  }
+  step() {
+    if (this.c >= this.cycles) throw new Error('Simulation 已完成'); const c=this.c, wanted=Array(N).fill(0), unwanted=Array(N).fill(0), blacked=Array(N).fill(0), bets=Array(this.n).fill(0), bonus=Array.from({length:this.n},()=>Array(N).fill(0)), cpNow=Array(this.n).fill(0), cpBonus=Array.from({length:this.n},()=>Array(N).fill(0)), jump={value:false}, voting=Array(this.n).fill(1); for(let i=7;i<Math.min(9,this.n);i++) voting[i]=3;
+    for(let j=0;j<this.n;j++) { const {locating,specific}=this.makeBets(c,j), total=sum(locating); if(!total) continue; const ranks=this.rankings(); if(this.accubets[j]!==0) { if(ranks.includes(j) && this.profitrate[j].length && this.profitrate[j].at(-1)<this.lower[j]) voting[j]=Math.floor(Math.log(this.accubets[j]))+1; } else voting[j]=0; if(this.collectivebets[j].length>5 && total>2*targetFunction(this.collectivebets[j])) { jump.value=true; this.spikes[j].push(c); voting[j]=Math.floor(c/this.spikes[j].length)+1; } if(this.profitrate[j].length && this.profitrate[j].at(-1)<0) this.deviation[j]++; else this.deviation[j]=0; if(this.drift.length && this.drift.at(-1)[0]>0) this.driftPull=1; else if(this.drift.length && this.drift.at(-1)[0]<0) this.driftPull=0; if(this.driftPull && this.profitrate[j].length && this.profitrate[j].at(-1)<UL && this.deviation[j]) { const mult=Math.floor(Math.log(this.deviation[j]))+1; if(mult>voting[j]) voting[j]*=mult; }
+      const specificSum=sum(specific), specificBonus=specific.map(x=>N*x*.98); if(specificSum) { const sp=specificBonus.map(x=>(this.cpBonus[j]+x)/(this.cpBets[j]+specificSum)); for(let i=0;i<N;i++) if(sp[i]<1) blacked[i]+=voting[j]*ENHANCED; } this.cpBets[j]+=specificSum; this.collectiveCPbets[j].push(specificSum); cpNow[j]=specificSum; cpBonus[j]=specificBonus; bets[j]=total; bonus[j]=locating.map(x=>N*x*.98); const current=bonus[j].map(x=>1-x/total);
+      if(c>0) { this.accubets[j]+=this.collectivebets[j].at(-1); this.accubonus[j]+=this.collectivebonus[j].at(-1); const rate=this.accubets[j] ? 1-this.accubonus[j]/this.accubets[j] : 0; this.profitrate[j].push(rate); this.cpBets[j]+=this.collectiveCPbets[j].at(-1); this.cpBonus[j]+=this.collectiveCPbonus[j].at(-1); this.cprtp[j].push(this.cpBets[j] ? this.cpBonus[j]/this.cpBets[j] : 0); const acc=current.map((x,i)=>1-(this.accubonus[j]+bonus[j][i])/(this.accubets[j]+bets[j])); for(let i=0;i<N;i++) { if(rate<this.lower[j]) { if(rate>UL) { if(current[i]>this.lower[j]) wanted[i]++; else if(current[i]<=HUL || acc[i]<=rate) unwanted[i]+=voting[j]*(Math.abs(Math.trunc(current[i]))+1); } else { if(current[i]>this.lower[j]) wanted[i]+=voting[j]; else if(current[i]<=HUL || acc[i]<=rate) unwanted[i]+=voting[j]*(Math.abs(Math.trunc(current[i]))+1); } } else if(rate>this.upper[j]) { if(acc[i]>=this.lower[j] && current[i]<rate) wanted[i]++; else if(current[i]<=HUL || current[i]<=this.lower[j]) unwanted[i]+=voting[j]*(Math.abs(Math.trunc(current[i]))+1); } else { if(current[i]<=UL) unwanted[i]++; if(current[i]<=HUL) unwanted[i]+=voting[j]*(Math.abs(Math.trunc(current[i]))+1); } } }
+    }
+    const grandB=sum(bets), grandBonus=sum(bonus.map(sum)), globalRate=grandB?1-grandBonus/grandB:0, accB=sum(this.accubets)+grandB, accBonus=sum(this.accubonus)+grandBonus, accGlobal=accB?1-accBonus/accB:0, MW=Math.max(...wanted), MU=Math.max(...unwanted), pen={}; const initial=Math.trunc(targetBeta(wanted.slice().sort((a,b)=>b-a)));
+    for(let w=initial;w<=MW;w++) { let wr=[]; for(let i=0;i<N;i++) if(wanted[i]===w) wr.push(i); if(!wr.length) continue; pen[w]=0; for(let k=0;k<MU;k++) { let copy=wr.slice(), ur=[]; for(let i=0;i<N;i++) if(unwanted[i]===MU-k) ur.push(i); for(const e of wr) if(ur.includes(e)) { copy.splice(copy.indexOf(e),1); if(!copy.length) break; } if(!copy.length) break; pen[w]=k; wr=copy; } }
+    let final=[]; const pkeys=Object.keys(pen); if(pkeys.length) { let best=pkeys[0]; const score=k=>(MW-Number(k))**2+(MU-pen[k])**2; for(const k of pkeys) if(score(k)<score(best)) best=k; const prep=[]; for(let i=0;i<N;i++) if(wanted[i]===Number(best)) prep.push(i); const deep=i=>(MU-unwanted[i])**2+blacked[i]**2; const md=Math.max(...prep.map(deep)); final=prep.filter(i=>deep(i)===md); } else for(let i=0;i<N;i++) if(wanted[i]===MW) final.push(i); if(!final.length) final=this.source.slice(); const controlled=this.rng()*100<this.controlrate || (jump.value && this.rng()<.3); const selected=controlled?pick(this.rng,final):pick(this.rng,this.source); if(controlled)this.actualControl++;
+    for(let j=0;j<this.n;j++) { this.collectivebonus[j].push(bonus[j][selected]); this.collectivebets[j].push(bets[j]); this.cpBonus[j]+=cpBonus[j][selected]; this.collectiveCPbonus[j].push(cpBonus[j][selected]); }
+    this.latestBets=bets; this.latestRates=this.profitrate.map(a=>a.length?a.at(-1):0); this.accumulatedBets=this.accubets.map((x,j)=>x+this.collectivebets[j].at(-1)); this.history.push(this.latestRates.slice()); const snapshot={cycle:c,selected,controlled,globalRate,accGlobal}; this.c++; return snapshot;
+  }
+}
+
+let sim=null, running=false;
+function cfg() { const clients=Math.max(1,Math.trunc(Number($('clients').value)||10)), cycles=Math.max(1,Math.trunc(Number($('cycles').value)||500)), control=Number($('control').value)||0; if(control<0||control>100) throw new Error('controlrate 必須介於 0 到 100'); return {clients,cycles,controlrate:control,lower:$('lower').value,upper:$('upper').value,seed:$('seed').value===''?null:Number($('seed').value)}; }
+function reset() { sim=new SimulationState(cfg()); $('csv').disabled=false; draw(); updateTable(); status('已建立模擬，按開始或單步。'); }
+function status(text) { $('status').textContent=text; }
+function axis(ctx,x,y,w,h,xmax,ymin,ymax) { ctx.strokeStyle='#d7dee9'; ctx.lineWidth=1; ctx.beginPath(); ctx.moveTo(x,y);ctx.lineTo(x,y+h);ctx.lineTo(x+w,y+h);ctx.stroke(); for(let i=0;i<=5;i++){const xx=x+w*i/5;ctx.fillStyle='#64748b';ctx.font='12px system-ui';ctx.fillText(Math.round(xmax*i/5),xx-9,y+h+18);ctx.strokeStyle='#eef2f7';ctx.beginPath();ctx.moveTo(xx,y);ctx.lineTo(xx,y+h);ctx.stroke();} for(let i=0;i<=4;i++){const value=ymax-(ymax-ymin)*i/4, yy=y+h*i/4;ctx.fillStyle='#64748b';ctx.fillText(value.toFixed(2),8,yy+4);ctx.strokeStyle='#eef2f7';ctx.beginPath();ctx.moveTo(x,yy);ctx.lineTo(x+w,yy);ctx.stroke();} }
+function draw() { const canvas=$('chart'),ctx=canvas.getContext('2d'),W=canvas.width,H=canvas.height;ctx.clearRect(0,0,W,H);ctx.fillStyle='#172033';ctx.font='bold 16px system-ui';ctx.fillText('Merchant profit rate（逐 cycle）',60,25); const x=60,y=45,w=W-90,h=320,ymin=-.15,ymax=.35; axis(ctx,x,y,w,h,sim?sim.cycles:500,ymin,ymax); const py=v=>y+h-(v-ymin)/(ymax-ymin)*h, px=i=>x+(i/Math.max(1,sim?sim.cycles-1:499))*w; if(sim){ctx.setLineDash([6,5]);ctx.strokeStyle='#dc2626';ctx.beginPath();ctx.moveTo(x,py(mean(sim.lower)));ctx.lineTo(x+w,py(mean(sim.lower)));ctx.stroke();ctx.strokeStyle='#d97706';ctx.beginPath();ctx.moveTo(x,py(mean(sim.upper)));ctx.lineTo(x+w,py(mean(sim.upper)));ctx.stroke();ctx.setLineDash([]); for(let j=0;j<sim.n;j++){const hist=sim.profitrate[j];ctx.strokeStyle=`hsl(${(j*360/Math.max(1,sim.n))},70%,45%)`;ctx.lineWidth=1.6;ctx.beginPath();hist.forEach((v,i)=>{const xx=px(i+1),yy=py(v);if(i)ctx.lineTo(xx,yy);else ctx.moveTo(xx,yy);});ctx.stroke();} } ctx.fillStyle='#172033';ctx.font='bold 16px system-ui';ctx.fillText('Latest bets by merchant',60,415); const by=435,bh=190; ctx.strokeStyle='#d7dee9';ctx.beginPath();ctx.moveTo(60,by+bh);ctx.lineTo(W-30,by+bh);ctx.stroke(); if(sim){const max=Math.max(1,...sim.latestBets),bw=(W-100)/sim.n*.75;sim.latestBets.forEach((v,j)=>{const bx=70+j*(W-100)/sim.n, barh=v/max*bh;ctx.fillStyle=`hsl(${(j*360/Math.max(1,sim.n))},70%,55%)`;ctx.fillRect(bx,by+bh-barh,bw,barh);ctx.fillStyle='#64748b';ctx.font='11px system-ui';ctx.fillText(j,bx+2,by+bh+15);});} }
+function updateTable(){const body=$('table').querySelector('tbody');body.innerHTML='';if(!sim)return;for(let j=0;j<sim.n;j++){const tr=document.createElement('tr');const rate=sim.latestRates[j]||0;tr.innerHTML=`<td>client ${j}</td><td>${rate.toFixed(6)}</td><td>${(sim.latestBets[j]||0).toFixed(2)}</td><td>${(sim.accumulatedBets[j]||0).toFixed(2)}</td>`;body.appendChild(tr);}}
+function doStep(){if(!sim)reset();if(sim.c>=sim.cycles){running=false;status('模擬已完成。');return;}const s=sim.step();draw();updateTable();status(`cycle ${sim.c}/${sim.cycles}｜selected position ${s.selected}｜${s.controlled?'controlled':'random'}｜actual control ${(sim.actualControl/sim.c*100).toFixed(2)}%`);if(sim.c>=sim.cycles){running=false;status(`完成 ${sim.cycles} cycles｜actual control ${(sim.actualControl/sim.cycles*100).toFixed(2)}%｜最後選點 ${s.selected}`);}}
+function loop(){if(!running)return;doStep();if(running&&sim.c<sim.cycles)setTimeout(loop,Math.max(0,Number($('delay').value)||0));}
+function downloadCSV(){if(!sim)return;let rows=['cycle,'+Array.from({length:sim.n},(_,i)=>`client_${i}`).join(',')];const hist=sim.history;hist.forEach((row,i)=>rows.push((i+1)+','+row.map(x=>x.toFixed(8)).join(',')));const blob=new Blob([rows.join('\n')],{type:'text/csv;charset=utf-8'}),a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='profitrate_realtime.csv';a.click();URL.revokeObjectURL(a.href);}
+$('start').onclick=()=>{running=false;try{reset();running=true;loop();}catch(e){status('參數錯誤：'+e.message);}};
+$('pause').onclick=()=>{running=false;status(sim?`已暫停於 cycle ${sim.c}/${sim.cycles}。`:'尚未開始。');};
+$('one').onclick=()=>{running=false;try{doStep();}catch(e){status('參數錯誤：'+e.message);}};
+$('csv').onclick=downloadCSV;
+try{reset();}catch(e){status(e.message);}
+</script>
+</body>
+</html>

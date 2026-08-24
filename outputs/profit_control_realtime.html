@@ -5,38 +5,137 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Profit Control 即時動態模擬</title>
   <style>
-    :root { color-scheme: light; font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
-    body { margin: 0; background: #f5f7fb; color: #172033; }
-    main { max-width: 1240px; margin: 0 auto; padding: 24px; }
-    h1 { margin: 0 0 6px; font-size: 26px; }
+    :root {
+      color-scheme: light;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      --background: #f5f7fb;
+      --surface: #ffffff;
+      --foreground: #172033;
+      --muted: #64748b;
+      --border: #dfe5ef;
+      --grid: #e8edf4;
+      --primary: #2563eb;
+      --secondary: #64748b;
+      --green: #00a98f;
+      --yellow: #d8b928;
+      --red: #c91f46;
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: var(--background); color: var(--foreground); }
+    main { max-width: 1560px; margin: 0 auto; padding: 24px; }
+    h1 { margin: 0 0 6px; font-size: 26px; font-weight: 600; }
+    h2 { margin: 0; font-size: 16px; font-weight: 600; }
     .intro { color: #596579; margin: 0 0 18px; }
-    .panel { background: white; border: 1px solid #dfe5ef; border-radius: 12px; padding: 16px; box-shadow: 0 3px 14px #22304a0d; }
-    .controls { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; align-items: end; }
+    .panel {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 16px;
+      box-shadow: 0 3px 14px #22304a0d;
+    }
+    .controls {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+      gap: 12px;
+      align-items: end;
+    }
     label { display: grid; gap: 5px; font-size: 13px; color: #596579; }
-    input { width: 100%; box-sizing: border-box; padding: 8px 9px; border: 1px solid #cbd4e2; border-radius: 7px; font-size: 14px; color: #172033; }
+    input {
+      width: 100%;
+      padding: 8px 9px;
+      border: 1px solid #cbd4e2;
+      border-radius: 7px;
+      font: inherit;
+      color: var(--foreground);
+      background: var(--surface);
+    }
+    input:focus { outline: 2px solid #93b4ff; outline-offset: 1px; }
     .actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
-    button { border: 0; border-radius: 7px; padding: 9px 14px; cursor: pointer; background: #2563eb; color: white; font-size: 14px; }
-    button.secondary { background: #64748b; }
+    button {
+      border: 0;
+      border-radius: 7px;
+      padding: 9px 14px;
+      cursor: pointer;
+      background: var(--primary);
+      color: white;
+      font: inherit;
+    }
+    button.secondary { background: var(--secondary); }
     button:disabled { opacity: .5; cursor: not-allowed; }
     #status { margin: 13px 0 0; color: #475569; font-size: 14px; min-height: 20px; }
-    canvas { display: block; width: 100%; height: auto; margin-top: 16px; border: 1px solid #e4e9f1; border-radius: 8px; background: #fff; }
+    .dashboard {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) minmax(380px, 1fr);
+      gap: 16px;
+      margin-top: 16px;
+      align-items: start;
+    }
+    .chart-panel { min-width: 0; }
+    .chart-heading {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 8px;
+    }
+    .chart-meta { color: var(--muted); font-size: 12px; text-align: right; }
+    canvas {
+      display: block;
+      width: 100%;
+      height: auto;
+      border: 1px solid #e4e9f1;
+      border-radius: 8px;
+      background: var(--surface);
+    }
+    #choice3d { cursor: grab; touch-action: none; }
+    #choice3d.dragging { cursor: grabbing; }
+    .choice-wrap { position: relative; }
+    .choice-tooltip {
+      position: absolute;
+      pointer-events: none;
+      display: none;
+      z-index: 3;
+      max-width: 230px;
+      padding: 8px 10px;
+      border-radius: 7px;
+      background: #172033ee;
+      color: white;
+      font-size: 12px;
+      line-height: 1.45;
+      box-shadow: 0 5px 18px #17203338;
+    }
+    .legend { display: flex; flex-wrap: wrap; gap: 14px; margin-top: 10px; color: #526074; font-size: 12px; }
+    .legend span { display: inline-flex; align-items: center; gap: 6px; }
+    .swatch { width: 11px; height: 11px; border-radius: 2px; display: inline-block; }
+    .swatch.green { background: var(--green); }
+    .swatch.yellow { background: var(--yellow); }
+    .swatch.red { background: var(--red); }
     .result { margin-top: 16px; overflow-x: auto; }
     table { border-collapse: collapse; min-width: 620px; width: 100%; font-size: 13px; }
-    th, td { border-bottom: 1px solid #e8edf4; text-align: right; padding: 7px 9px; }
+    th, td { border-bottom: 1px solid var(--grid); text-align: right; padding: 7px 9px; }
     th { background: #f8fafc; color: #475569; }
     th:first-child, td:first-child { text-align: left; }
-    .note { color: #64748b; font-size: 13px; line-height: 1.55; margin-top: 14px; }
+    .note { color: var(--muted); font-size: 13px; line-height: 1.55; margin-top: 14px; }
+    @media (max-width: 980px) { .dashboard { grid-template-columns: 1fr; } }
+    @media (max-width: 560px) {
+      main { padding: 14px; }
+      .controls { grid-template-columns: 1fr 1fr; }
+      .chart-heading { align-items: flex-start; flex-direction: column; }
+      .chart-meta { text-align: left; }
+    }
   </style>
 </head>
 <body>
 <main>
   <h1>Profit Control 即時動態模擬</h1>
-  <p class="intro">每個 cycle 計算一次商戶投注，並立即更新商戶 profit rate 與當期投注圖。</p>
-  <section class="panel">
+  <p class="intro">每個 cycle 完整計算模型；2D 結果即時更新，3D wanted／unwanted 圖依候選數量與裝置速度自動節流。</p>
+
+  <section class="panel" aria-label="Simulation controls">
     <div class="controls">
       <label>lowerbounds（單值或逗號分隔）<input id="lower" value="0.0"></label>
       <label>upperbounds（單值或逗號分隔）<input id="upper" value="0.03"></label>
       <label>runclients<input id="clients" type="number" min="1" value="10"></label>
+      <label>candidateCount<input id="candidates" type="number" min="1" max="1000" value="100"></label>
       <label>cycles<input id="cycles" type="number" min="1" value="500"></label>
       <label>controlrate（0–100%）<input id="control" type="number" min="0" max="100" step="0.1" value="0"></label>
       <label>seed（可留白）<input id="seed" type="number" placeholder="random"></label>
@@ -48,79 +147,972 @@
       <button id="one" class="secondary">單步</button>
       <button id="csv" class="secondary" disabled>下載 CSV</button>
     </div>
-    <div id="status">尚未開始。</div>
+    <div id="status" aria-live="polite">尚未開始。</div>
   </section>
-  <canvas id="chart" width="1160" height="700"></canvas>
+
+  <div class="dashboard">
+    <section class="panel chart-panel">
+      <div class="chart-heading">
+        <h2>Merchant results</h2>
+        <span class="chart-meta">Profit rate 與當期投注</span>
+      </div>
+      <canvas id="chart" width="900" height="650" role="img" aria-label="各商戶 profit rate 折線與當期投注柱狀圖"></canvas>
+    </section>
+
+    <section class="panel chart-panel">
+      <div class="chart-heading">
+        <h2>Wanted ↑ / Unwanted ↓</h2>
+        <span id="choicePolicy" class="chart-meta">3D auto refresh</span>
+      </div>
+      <div class="choice-wrap">
+        <canvas id="choice3d" width="900" height="650" role="img" aria-label="候選項 wanted 向上、unwanted 向下的可旋轉三維柱狀圖"></canvas>
+        <div id="choiceTooltip" class="choice-tooltip" role="tooltip"></div>
+      </div>
+      <div class="legend" aria-label="3D chart legend">
+        <span><i class="swatch green"></i>一般候選</span>
+        <span><i class="swatch yellow"></i>Wanted 階段候選</span>
+        <span><i class="swatch red"></i>當期實際選點</span>
+        <span>拖曳旋轉 · 滾輪縮放 · 雙擊重設</span>
+      </div>
+    </section>
+  </div>
+
   <section class="panel result">
-    <table id="table"><thead><tr><th>Merchant</th><th>Final profit rate</th><th>Latest bets</th><th>Accumulated bets</th></tr></thead><tbody></tbody></table>
+    <table id="table">
+      <thead><tr><th>Merchant</th><th>Final profit rate</th><th>Latest bets</th><th>Accumulated bets</th></tr></thead>
+      <tbody></tbody>
+    </table>
   </section>
-  <p class="note">模型保留原始程式的投注生成、wanted / unwanted / blacked 評分與 controlrate 選點流程。瀏覽器版本使用 Canvas 繪圖，不需安裝套件或載入外部網路資源。</p>
+  <p class="note">模型保留原始投注、wanted / unwanted / blacked 投票與 controlrate 選點流程。候選數改變時，投注位置數按原始 100 候選模型的比例縮放；3D 圖只顯示當期 snapshot，不改變選點結果。</p>
 </main>
+
 <script>
 'use strict';
-const N = 100, INTERVAL = 30, ENHANCED = 2, UL = -0.05, HUL = -8;
+
+const INTERVAL = 30;
+const ENHANCED = 2;
+const UL = -0.05;
+const HUL = -8;
+const MAX_CANDIDATES = 1000;
+const COLORS = { green: '#00a98f', yellow: '#d8b928', red: '#c91f46' };
 const $ = id => document.getElementById(id);
-const sum = a => a.reduce((x, y) => x + y, 0);
-const mean = a => a.length ? sum(a) / a.length : 0;
-function mulberry32(seed) { return function() { let t = seed += 0x6D2B79F5; t = Math.imul(t ^ t >>> 15, t | 1); t ^= t + Math.imul(t ^ t >>> 7, t | 61); return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+const sum = values => values.reduce((total, value) => total + value, 0);
+const mean = values => values.length ? sum(values) / values.length : 0;
+const clamp = (value, low, high) => Math.max(low, Math.min(high, value));
+
+function mulberry32(seed) {
+  return function random() {
+    let value = seed += 0x6D2B79F5;
+    value = Math.imul(value ^ value >>> 15, value | 1);
+    value ^= value + Math.imul(value ^ value >>> 7, value | 61);
+    return ((value ^ value >>> 14) >>> 0) / 4294967296;
+  };
+}
+
 function rngFor(seed) { return seed === null ? Math.random : mulberry32(seed >>> 0); }
-function ri(rng, lo, hi) { return Math.floor(rng() * (hi - lo)) + lo; }
-function pick(rng, a) { return a[Math.floor(rng() * a.length)]; }
-function shuffle(rng, a) { for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(rng() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; }
-function sample(rng, a, n, replacement = false) { const out = []; if (replacement) { for (let i = 0; i < n; i++) out.push(pick(rng, a)); return out; } const copy = a.slice(); shuffle(rng, copy); return copy.slice(0, n); }
-function parseBound(text, n) { const v = String(text).replaceAll(';', ',').split(',').map(x => Number(x.trim())).filter(Number.isFinite); if (!v.length) throw new Error('bound 必須至少有一個數字'); if (v.length === 1) return Array(n).fill(v[0]); if (v.length !== n) throw new Error(`bound 必須是單值或 ${n} 個數字`); return v; }
-function around(c, poles) { return poles.some(p => c < p + INTERVAL / 2 && c > p - INTERVAL / 2); }
-function avgSq(a, c) { return a.length ? sum(a.map(x => (x - c) ** 2)) / a.length : 0; }
-function targetFunction(values) { if (values.length > 50) values = values.slice(-50); if (values.length < 3) return mean(values); const b = values.slice().sort((x,y) => x-y), M = b[b.length-1], m = b[0], c = b.slice(); c.splice(c.indexOf(M),1); c.splice(c.indexOf(m),1); const target = {}; const av = mean(values); for (let i=0; i<c.length-2; i++) for (let j=1; j<c.length-i-1; j++) target[`${i},${j}`] = avgSq(c.slice(0,i+1),m) + avgSq(c.slice(i+1,i+j+1),av) + avgSq(c.slice(i+j+1),M); const keys = Object.keys(target); if (!keys.length) return mean(values); const key = keys.reduce((x,y) => target[x] <= target[y] ? x : y), ij = key.split(',').map(Number); const groups = [c.slice(0,ij[0]+1).concat([m]), c.slice(ij[0]+1,ij[0]+ij[1]+1), c.slice(ij[0]+ij[1]+1).concat([M])]; return mean(groups.reduce((x,y) => y.length > x.length ? y : x, [])); }
-function targetBeta(values) { if (values.length < 3) return mean(values); const b = values.slice().sort((x,y) => x-y), M=b[b.length-1], m=b[0], c=b.slice(); c.splice(c.indexOf(M),1); c.splice(c.indexOf(m),1); const target=[]; for (let i=0; i<c.length-1; i++) target[i] = avgSq(c.slice(0,i+1),m) + avgSq(c.slice(i+1),M); if (!target.length) return mean(values); let ix=0; for (let i=1;i<target.length;i++) if (target[i]<target[ix]) ix=i; return mean(c.slice(ix+1)) || mean(values); }
+function randomInt(rng, low, highExclusive) { return Math.floor(rng() * (highExclusive - low)) + low; }
+function pick(rng, values) { return values[Math.floor(rng() * values.length)]; }
+
+function shuffle(rng, values) {
+  for (let index = values.length - 1; index > 0; index--) {
+    const other = Math.floor(rng() * (index + 1));
+    [values[index], values[other]] = [values[other], values[index]];
+  }
+  return values;
+}
+
+function sample(rng, values, count, replacement = false) {
+  const result = [];
+  if (replacement) {
+    for (let index = 0; index < count; index++) result.push(pick(rng, values));
+    return result;
+  }
+  return shuffle(rng, values.slice()).slice(0, count);
+}
+
+function parseBound(text, count) {
+  const values = String(text).replaceAll(';', ',').split(',')
+    .map(value => Number(value.trim())).filter(Number.isFinite);
+  if (!values.length) throw new Error('bound 必須至少有一個數字');
+  if (values.length === 1) return Array(count).fill(values[0]);
+  if (values.length !== count) throw new Error(`bound 必須是單值或 ${count} 個數字`);
+  return values;
+}
+
+function aroundPole(cycle, poles) {
+  return poles.some(pole => cycle < pole + INTERVAL / 2 && cycle > pole - INTERVAL / 2);
+}
+
+function averageSquared(values, center) {
+  return values.length ? sum(values.map(value => (value - center) ** 2)) / values.length : 0;
+}
+
+function targetFunction(values) {
+  if (values.length > 50) values = values.slice(-50);
+  if (values.length < 3) return mean(values);
+  const ordered = values.slice().sort((a, b) => a - b);
+  const maximum = ordered.at(-1);
+  const minimum = ordered[0];
+  const middle = ordered.slice();
+  middle.splice(middle.indexOf(maximum), 1);
+  middle.splice(middle.indexOf(minimum), 1);
+  const objectives = {};
+  const average = mean(values);
+  for (let i = 0; i < middle.length - 2; i++) {
+    for (let j = 1; j < middle.length - i - 1; j++) {
+      objectives[`${i},${j}`] = averageSquared(middle.slice(0, i + 1), minimum)
+        + averageSquared(middle.slice(i + 1, i + j + 1), average)
+        + averageSquared(middle.slice(i + j + 1), maximum);
+    }
+  }
+  const keys = Object.keys(objectives);
+  if (!keys.length) return mean(values);
+  const best = keys.reduce((left, right) => objectives[left] <= objectives[right] ? left : right);
+  const [i, j] = best.split(',').map(Number);
+  const groups = [
+    middle.slice(0, i + 1).concat([minimum]),
+    middle.slice(i + 1, i + j + 1),
+    middle.slice(i + j + 1).concat([maximum]),
+  ];
+  return mean(groups.reduce((left, right) => right.length > left.length ? right : left, []));
+}
+
+function targetBeta(values) {
+  if (values.length < 3) return mean(values);
+  const ordered = values.slice().sort((a, b) => a - b);
+  const maximum = ordered.at(-1);
+  const minimum = ordered[0];
+  const middle = ordered.slice();
+  middle.splice(middle.indexOf(maximum), 1);
+  middle.splice(middle.indexOf(minimum), 1);
+  const objective = [];
+  for (let index = 0; index < middle.length - 1; index++) {
+    objective[index] = averageSquared(middle.slice(0, index + 1), minimum)
+      + averageSquared(middle.slice(index + 1), maximum);
+  }
+  if (!objective.length) return mean(values);
+  let best = 0;
+  for (let index = 1; index < objective.length; index++) {
+    if (objective[index] < objective[best]) best = index;
+  }
+  return mean(middle.slice(best + 1)) || mean(values);
+}
 
 class SimulationState {
-  constructor(cfg) {
-    this.n = cfg.clients; this.cycles = cfg.cycles; this.controlrate = cfg.controlrate;
-    this.lower = parseBound(cfg.lower, this.n); this.upper = parseBound(cfg.upper, this.n);
-    this.rng = rngFor(cfg.seed); this.c = 0; this.actualControl = 0;
-    this.source = Array.from({length:N}, (_,i)=>i); this.chance = [0,0,0,0,0,0,0,0,0,1];
-    const blank = () => Array.from({length:this.n}, () => []); const zeros = () => Array(this.n).fill(0);
-    this.collectivebets=blank(); this.collectivebonus=blank(); this.collectiveCPbets=blank(); this.collectiveCPbonus=blank(); this.spikes=blank(); this.deviation=zeros(); this.accubets=zeros(); this.accubonus=zeros(); this.profitrate=blank(); this.cprtp=blank(); this.cpBets=zeros(); this.cpBonus=zeros();
-    this.drift=[]; this.driftPull=1; this.cpd=Array.from({length:this.n},()=>ri(this.rng,0,this.cycles));
-    const poleCount = Math.floor(this.cycles / INTERVAL * .7), cycleSource = Array.from({length:this.cycles},(_,i)=>i); this.poles=Array.from({length:this.n},()=>sample(this.rng,cycleSource,poleCount).sort((a,b)=>a-b));
-    this.latestBets=zeros(); this.latestRates=zeros(); this.accumulatedBets=zeros(); this.history=[];
+  constructor(config) {
+    this.clientCount = config.clients;
+    this.candidateCount = config.candidates;
+    this.cycles = config.cycles;
+    this.controlrate = config.controlrate;
+    this.lower = parseBound(config.lower, this.clientCount);
+    this.upper = parseBound(config.upper, this.clientCount);
+    this.rng = rngFor(config.seed);
+    this.cycle = 0;
+    this.actualControl = 0;
+    this.source = Array.from({ length: this.candidateCount }, (_, index) => index);
+    this.chance = [0, 0, 0, 0, 0, 0, 0, 0, 0, 1];
+    const blank = () => Array.from({ length: this.clientCount }, () => []);
+    const zeros = () => Array(this.clientCount).fill(0);
+    this.collectiveBets = blank();
+    this.collectiveBonus = blank();
+    this.collectiveCPBets = blank();
+    this.collectiveCPBonus = blank();
+    this.spikes = blank();
+    this.deviation = zeros();
+    this.accumulatedBets = zeros();
+    this.accumulatedBonus = zeros();
+    this.profitrate = blank();
+    this.cprtp = blank();
+    this.controlledPlayerBets = zeros();
+    this.controlledPlayerBonus = zeros();
+    this.drift = [];
+    this.driftPull = 1;
+    this.cpd = Array.from({ length: this.clientCount }, () => randomInt(this.rng, 0, this.cycles));
+    const poleCount = Math.floor(this.cycles / INTERVAL * 0.7);
+    const cycleSource = Array.from({ length: this.cycles }, (_, index) => index);
+    this.poles = Array.from(
+      { length: this.clientCount },
+      () => sample(this.rng, cycleSource, poleCount).sort((a, b) => a - b),
+    );
+    this.latestBets = zeros();
+    this.latestRates = zeros();
+    this.accumulatedBetTotals = zeros();
+    this.history = [];
+    this.latestChoice = null;
   }
-  rankings() { return Array.from({length:this.n},(_,i)=>i).sort((a,b)=>this.accubets[b]-this.accubets[a]).slice(0,Math.floor(this.n/10)); }
-  makeBets(c,j) {
-    const betnumbers=sample(this.rng,this.source,ri(this.rng,43,63)); const locating=Array(N).fill(0); const level=shuffle(this.rng,[0,1]); const sales=level[0]+2*level[1];
-    for (const i of betnumbers) { const wave=Math.round(Math.abs(2+Math.sin((c-i-this.cpd[j])*2*Math.PI/this.cycles))*100)/100; if (around(c,this.poles[j])) locating[i] += (pick(this.rng,this.chance)===0 ? ri(this.rng,4,100) : ri(this.rng,4,10)*100) * sales * wave; else locating[i] += ri(this.rng,4,10)*5*sales*wave; }
-    const specific=Array(N).fill(0); const specificNumbers=sample(this.rng,this.source,ri(this.rng,10,100),true); for (const i of specificNumbers) specific[i] += ri(this.rng,4,10)*sales; for(let i=0;i<N;i++) locating[i]+=specific[i]; return {locating,specific};
+
+  rankings() {
+    return Array.from({ length: this.clientCount }, (_, index) => index)
+      .sort((a, b) => this.accumulatedBets[b] - this.accumulatedBets[a])
+      .slice(0, Math.floor(this.clientCount / 10));
   }
-  step() {
-    if (this.c >= this.cycles) throw new Error('Simulation 已完成'); const c=this.c, wanted=Array(N).fill(0), unwanted=Array(N).fill(0), blacked=Array(N).fill(0), bets=Array(this.n).fill(0), bonus=Array.from({length:this.n},()=>Array(N).fill(0)), cpNow=Array(this.n).fill(0), cpBonus=Array.from({length:this.n},()=>Array(N).fill(0)), jump={value:false}, voting=Array(this.n).fill(1); for(let i=7;i<Math.min(9,this.n);i++) voting[i]=3;
-    for(let j=0;j<this.n;j++) { const {locating,specific}=this.makeBets(c,j), total=sum(locating); if(!total) continue; const ranks=this.rankings(); if(this.accubets[j]!==0) { if(ranks.includes(j) && this.profitrate[j].length && this.profitrate[j].at(-1)<this.lower[j]) voting[j]=Math.floor(Math.log(this.accubets[j]))+1; } else voting[j]=0; if(this.collectivebets[j].length>5 && total>2*targetFunction(this.collectivebets[j])) { jump.value=true; this.spikes[j].push(c); voting[j]=Math.floor(c/this.spikes[j].length)+1; } if(this.profitrate[j].length && this.profitrate[j].at(-1)<0) this.deviation[j]++; else this.deviation[j]=0; if(this.drift.length && this.drift.at(-1)[0]>0) this.driftPull=1; else if(this.drift.length && this.drift.at(-1)[0]<0) this.driftPull=0; if(this.driftPull && this.profitrate[j].length && this.profitrate[j].at(-1)<UL && this.deviation[j]) { const mult=Math.floor(Math.log(this.deviation[j]))+1; if(mult>voting[j]) voting[j]*=mult; }
-      const specificSum=sum(specific), specificBonus=specific.map(x=>N*x*.98); if(specificSum) { const sp=specificBonus.map(x=>(this.cpBonus[j]+x)/(this.cpBets[j]+specificSum)); for(let i=0;i<N;i++) if(sp[i]<1) blacked[i]+=voting[j]*ENHANCED; } this.cpBets[j]+=specificSum; this.collectiveCPbets[j].push(specificSum); cpNow[j]=specificSum; cpBonus[j]=specificBonus; bets[j]=total; bonus[j]=locating.map(x=>N*x*.98); const current=bonus[j].map(x=>1-x/total);
-      if(c>0) { this.accubets[j]+=this.collectivebets[j].at(-1); this.accubonus[j]+=this.collectivebonus[j].at(-1); const rate=this.accubets[j] ? 1-this.accubonus[j]/this.accubets[j] : 0; this.profitrate[j].push(rate); this.cpBets[j]+=this.collectiveCPbets[j].at(-1); this.cpBonus[j]+=this.collectiveCPbonus[j].at(-1); this.cprtp[j].push(this.cpBets[j] ? this.cpBonus[j]/this.cpBets[j] : 0); const acc=current.map((x,i)=>1-(this.accubonus[j]+bonus[j][i])/(this.accubets[j]+bets[j])); for(let i=0;i<N;i++) { if(rate<this.lower[j]) { if(rate>UL) { if(current[i]>this.lower[j]) wanted[i]++; else if(current[i]<=HUL || acc[i]<=rate) unwanted[i]+=voting[j]*(Math.abs(Math.trunc(current[i]))+1); } else { if(current[i]>this.lower[j]) wanted[i]+=voting[j]; else if(current[i]<=HUL || acc[i]<=rate) unwanted[i]+=voting[j]*(Math.abs(Math.trunc(current[i]))+1); } } else if(rate>this.upper[j]) { if(acc[i]>=this.lower[j] && current[i]<rate) wanted[i]++; else if(current[i]<=HUL || current[i]<=this.lower[j]) unwanted[i]+=voting[j]*(Math.abs(Math.trunc(current[i]))+1); } else { if(current[i]<=UL) unwanted[i]++; if(current[i]<=HUL) unwanted[i]+=voting[j]*(Math.abs(Math.trunc(current[i]))+1); } } }
+
+  makeBets(cycle, client) {
+    const normalLow = Math.max(1, Math.ceil(this.candidateCount * 0.43));
+    const normalHigh = Math.max(normalLow, Math.floor(this.candidateCount * 0.62));
+    const betNumbers = sample(this.rng, this.source, randomInt(this.rng, normalLow, normalHigh + 1));
+    const locating = Array(this.candidateCount).fill(0);
+    const level = shuffle(this.rng, [0, 1]);
+    const sales = level[0] + 2 * level[1];
+    for (const candidate of betNumbers) {
+      const wave = Math.round(Math.abs(
+        2 + Math.sin((cycle - candidate - this.cpd[client]) * 2 * Math.PI / this.cycles),
+      ) * 100) / 100;
+      if (aroundPole(cycle, this.poles[client])) {
+        locating[candidate] += (
+          pick(this.rng, this.chance) === 0
+            ? randomInt(this.rng, 4, 100)
+            : randomInt(this.rng, 4, 10) * 100
+        ) * sales * wave;
+      } else {
+        locating[candidate] += randomInt(this.rng, 4, 10) * 5 * sales * wave;
+      }
     }
-    const grandB=sum(bets), grandBonus=sum(bonus.map(sum)), globalRate=grandB?1-grandBonus/grandB:0, accB=sum(this.accubets)+grandB, accBonus=sum(this.accubonus)+grandBonus, accGlobal=accB?1-accBonus/accB:0, MW=Math.max(...wanted), MU=Math.max(...unwanted), pen={}; const initial=Math.trunc(targetBeta(wanted.slice().sort((a,b)=>b-a)));
-    for(let w=initial;w<=MW;w++) { let wr=[]; for(let i=0;i<N;i++) if(wanted[i]===w) wr.push(i); if(!wr.length) continue; pen[w]=0; for(let k=0;k<MU;k++) { let copy=wr.slice(), ur=[]; for(let i=0;i<N;i++) if(unwanted[i]===MU-k) ur.push(i); for(const e of wr) if(ur.includes(e)) { copy.splice(copy.indexOf(e),1); if(!copy.length) break; } if(!copy.length) break; pen[w]=k; wr=copy; } }
-    let final=[]; const pkeys=Object.keys(pen); if(pkeys.length) { let best=pkeys[0]; const score=k=>(MW-Number(k))**2+(MU-pen[k])**2; for(const k of pkeys) if(score(k)<score(best)) best=k; const prep=[]; for(let i=0;i<N;i++) if(wanted[i]===Number(best)) prep.push(i); const deep=i=>(MU-unwanted[i])**2+blacked[i]**2; const md=Math.max(...prep.map(deep)); final=prep.filter(i=>deep(i)===md); } else for(let i=0;i<N;i++) if(wanted[i]===MW) final.push(i); if(!final.length) final=this.source.slice(); const controlled=this.rng()*100<this.controlrate || (jump.value && this.rng()<.3); const selected=controlled?pick(this.rng,final):pick(this.rng,this.source); if(controlled)this.actualControl++;
-    for(let j=0;j<this.n;j++) { this.collectivebonus[j].push(bonus[j][selected]); this.collectivebets[j].push(bets[j]); this.cpBonus[j]+=cpBonus[j][selected]; this.collectiveCPbonus[j].push(cpBonus[j][selected]); }
-    this.latestBets=bets; this.latestRates=this.profitrate.map(a=>a.length?a.at(-1):0); this.accumulatedBets=this.accubets.map((x,j)=>x+this.collectivebets[j].at(-1)); this.history.push(this.latestRates.slice()); const snapshot={cycle:c,selected,controlled,globalRate,accGlobal}; this.c++; return snapshot;
+    const specific = Array(this.candidateCount).fill(0);
+    const specificLow = Math.max(1, Math.ceil(this.candidateCount * 0.10));
+    const specificHigh = Math.max(specificLow, Math.floor(this.candidateCount * 0.99));
+    const specificNumbers = sample(
+      this.rng,
+      this.source,
+      randomInt(this.rng, specificLow, specificHigh + 1),
+      true,
+    );
+    for (const candidate of specificNumbers) {
+      specific[candidate] += randomInt(this.rng, 4, 10) * sales;
+    }
+    for (let candidate = 0; candidate < this.candidateCount; candidate++) {
+      locating[candidate] += specific[candidate];
+    }
+    return { locating, specific };
+  }
+
+  step() {
+    if (this.cycle >= this.cycles) throw new Error('Simulation 已完成');
+    const cycle = this.cycle;
+    const wanted = Array(this.candidateCount).fill(0);
+    const unwanted = Array(this.candidateCount).fill(0);
+    const blacked = Array(this.candidateCount).fill(0);
+    const bets = Array(this.clientCount).fill(0);
+    const bonus = Array.from({ length: this.clientCount }, () => Array(this.candidateCount).fill(0));
+    const cpBonus = Array.from({ length: this.clientCount }, () => Array(this.candidateCount).fill(0));
+    let jumpActivated = false;
+    const voting = Array(this.clientCount).fill(1);
+    for (let index = 7; index < Math.min(9, this.clientCount); index++) voting[index] = 3;
+
+    for (let client = 0; client < this.clientCount; client++) {
+      const generated = this.makeBets(cycle, client);
+      const total = sum(generated.locating);
+      if (!total) continue;
+      const ranks = this.rankings();
+      if (this.accumulatedBets[client] !== 0) {
+        if (ranks.includes(client) && this.profitrate[client].length
+          && this.profitrate[client].at(-1) < this.lower[client]) {
+          voting[client] = Math.floor(Math.log(this.accumulatedBets[client])) + 1;
+        }
+      } else voting[client] = 0;
+
+      if (this.collectiveBets[client].length > 5
+        && total > 2 * targetFunction(this.collectiveBets[client])) {
+        jumpActivated = true;
+        this.spikes[client].push(cycle);
+        voting[client] = Math.floor(cycle / this.spikes[client].length) + 1;
+      }
+      if (this.profitrate[client].length && this.profitrate[client].at(-1) < 0) {
+        this.deviation[client]++;
+      } else this.deviation[client] = 0;
+      if (this.drift.length && this.drift.at(-1)[0] > 0) this.driftPull = 1;
+      else if (this.drift.length && this.drift.at(-1)[0] < 0) this.driftPull = 0;
+      if (this.driftPull && this.profitrate[client].length
+        && this.profitrate[client].at(-1) < UL && this.deviation[client]) {
+        const multiplier = Math.floor(Math.log(this.deviation[client])) + 1;
+        if (multiplier > voting[client]) voting[client] *= multiplier;
+      }
+
+      const specificSum = sum(generated.specific);
+      const specificBonus = generated.specific.map(value => this.candidateCount * value * 0.98);
+      if (specificSum) {
+        const specificProfit = specificBonus.map(value => (
+          this.controlledPlayerBonus[client] + value
+        ) / (this.controlledPlayerBets[client] + specificSum));
+        for (let candidate = 0; candidate < this.candidateCount; candidate++) {
+          if (specificProfit[candidate] < 1) blacked[candidate] += voting[client] * ENHANCED;
+        }
+      }
+      this.controlledPlayerBets[client] += specificSum;
+      this.collectiveCPBets[client].push(specificSum);
+      cpBonus[client] = specificBonus;
+      bets[client] = total;
+      bonus[client] = generated.locating.map(value => this.candidateCount * value * 0.98);
+      const currentRate = bonus[client].map(value => 1 - value / total);
+
+      if (cycle > 0) {
+        this.accumulatedBets[client] += this.collectiveBets[client].at(-1);
+        this.accumulatedBonus[client] += this.collectiveBonus[client].at(-1);
+        const rate = this.accumulatedBets[client]
+          ? 1 - this.accumulatedBonus[client] / this.accumulatedBets[client] : 0;
+        this.profitrate[client].push(rate);
+        this.controlledPlayerBets[client] += this.collectiveCPBets[client].at(-1);
+        this.controlledPlayerBonus[client] += this.collectiveCPBonus[client].at(-1);
+        this.cprtp[client].push(this.controlledPlayerBets[client]
+          ? this.controlledPlayerBonus[client] / this.controlledPlayerBets[client] : 0);
+        const accumulatedRate = currentRate.map((_, candidate) => 1 - (
+          this.accumulatedBonus[client] + bonus[client][candidate]
+        ) / (this.accumulatedBets[client] + bets[client]));
+
+        for (let candidate = 0; candidate < this.candidateCount; candidate++) {
+          if (rate < this.lower[client]) {
+            if (rate > UL) {
+              if (currentRate[candidate] > this.lower[client]) wanted[candidate]++;
+              else if (currentRate[candidate] <= HUL || accumulatedRate[candidate] <= rate) {
+                unwanted[candidate] += voting[client]
+                  * (Math.abs(Math.trunc(currentRate[candidate])) + 1);
+              }
+            } else if (currentRate[candidate] > this.lower[client]) {
+              wanted[candidate] += voting[client];
+            } else if (currentRate[candidate] <= HUL || accumulatedRate[candidate] <= rate) {
+              unwanted[candidate] += voting[client]
+                * (Math.abs(Math.trunc(currentRate[candidate])) + 1);
+            }
+          } else if (rate > this.upper[client]) {
+            if (accumulatedRate[candidate] >= this.lower[client] && currentRate[candidate] < rate) {
+              wanted[candidate]++;
+            } else if (currentRate[candidate] <= HUL || currentRate[candidate] <= this.lower[client]) {
+              unwanted[candidate] += voting[client]
+                * (Math.abs(Math.trunc(currentRate[candidate])) + 1);
+            }
+          } else {
+            if (currentRate[candidate] <= UL) unwanted[candidate]++;
+            if (currentRate[candidate] <= HUL) {
+              unwanted[candidate] += voting[client]
+                * (Math.abs(Math.trunc(currentRate[candidate])) + 1);
+            }
+          }
+        }
+      }
+    }
+
+    const grandBets = sum(bets);
+    const grandBonus = sum(bonus.map(sum));
+    const globalRate = grandBets ? 1 - grandBonus / grandBets : 0;
+    const accumulatedGrandBets = sum(this.accumulatedBets) + grandBets;
+    const accumulatedGrandBonus = sum(this.accumulatedBonus) + grandBonus;
+    const accumulatedGlobalRate = accumulatedGrandBets
+      ? 1 - accumulatedGrandBonus / accumulatedGrandBets : 0;
+    const maximumWanted = Math.max(...wanted);
+    const maximumUnwanted = Math.max(...unwanted);
+    const penLayers = {};
+    const initial = Math.trunc(targetBeta(wanted.slice().sort((a, b) => b - a)));
+
+    for (let score = initial; score <= maximumWanted; score++) {
+      let wantedResult = this.source.filter(candidate => wanted[candidate] === score);
+      if (!wantedResult.length) continue;
+      penLayers[score] = 0;
+      for (let layer = 0; layer < maximumUnwanted; layer++) {
+        const copy = wantedResult.slice();
+        const unwantedResult = this.source.filter(
+          candidate => unwanted[candidate] === maximumUnwanted - layer,
+        );
+        for (const candidate of wantedResult) {
+          if (unwantedResult.includes(candidate)) {
+            copy.splice(copy.indexOf(candidate), 1);
+            if (!copy.length) break;
+          }
+        }
+        if (!copy.length) break;
+        penLayers[score] = layer;
+        wantedResult = copy;
+      }
+    }
+
+    let considered = [];
+    let finalists = [];
+    const penKeys = Object.keys(penLayers);
+    if (penKeys.length) {
+      let best = penKeys[0];
+      const score = key => (maximumWanted - Number(key)) ** 2
+        + (maximumUnwanted - penLayers[key]) ** 2;
+      for (const key of penKeys) if (score(key) < score(best)) best = key;
+      considered = this.source.filter(candidate => wanted[candidate] === Number(best));
+      const deepScore = candidate => (maximumUnwanted - unwanted[candidate]) ** 2
+        + blacked[candidate] ** 2;
+      const maximumDeep = Math.max(...considered.map(deepScore));
+      finalists = considered.filter(candidate => deepScore(candidate) === maximumDeep);
+    } else {
+      considered = this.source.filter(candidate => wanted[candidate] === maximumWanted);
+      finalists = considered.slice();
+    }
+    if (!finalists.length) {
+      considered = this.source.slice();
+      finalists = this.source.slice();
+    }
+
+    const controlled = this.rng() * 100 < this.controlrate
+      || (jumpActivated && this.rng() < 0.3);
+    const selected = controlled ? pick(this.rng, finalists) : pick(this.rng, this.source);
+    if (controlled) this.actualControl++;
+    for (let client = 0; client < this.clientCount; client++) {
+      this.collectiveBonus[client].push(bonus[client][selected]);
+      this.collectiveBets[client].push(bets[client]);
+      this.controlledPlayerBonus[client] += cpBonus[client][selected];
+      this.collectiveCPBonus[client].push(cpBonus[client][selected]);
+    }
+
+    this.latestBets = bets;
+    this.latestRates = this.profitrate.map(values => values.length ? values.at(-1) : 0);
+    this.accumulatedBetTotals = this.accumulatedBets.map(
+      (value, client) => value + this.collectiveBets[client].at(-1),
+    );
+    this.history.push(this.latestRates.slice());
+    const snapshot = {
+      cycle, selected, controlled, globalRate, accumulatedGlobalRate,
+      wanted: wanted.slice(), unwanted: unwanted.slice(), blacked: blacked.slice(),
+      considered: considered.slice(), finalists: finalists.slice(),
+    };
+    this.latestChoice = snapshot;
+    this.cycle++;
+    return snapshot;
   }
 }
 
-let sim=null, running=false;
-function cfg() { const clients=Math.max(1,Math.trunc(Number($('clients').value)||10)), cycles=Math.max(1,Math.trunc(Number($('cycles').value)||500)), control=Number($('control').value)||0; if(control<0||control>100) throw new Error('controlrate 必須介於 0 到 100'); return {clients,cycles,controlrate:control,lower:$('lower').value,upper:$('upper').value,seed:$('seed').value===''?null:Number($('seed').value)}; }
-function reset() { sim=new SimulationState(cfg()); $('csv').disabled=false; draw(); updateTable(); status('已建立模擬，按開始或單步。'); }
-function status(text) { $('status').textContent=text; }
-function axis(ctx,x,y,w,h,xmax,ymin,ymax) { ctx.strokeStyle='#d7dee9'; ctx.lineWidth=1; ctx.beginPath(); ctx.moveTo(x,y);ctx.lineTo(x,y+h);ctx.lineTo(x+w,y+h);ctx.stroke(); for(let i=0;i<=5;i++){const xx=x+w*i/5;ctx.fillStyle='#64748b';ctx.font='12px system-ui';ctx.fillText(Math.round(xmax*i/5),xx-9,y+h+18);ctx.strokeStyle='#eef2f7';ctx.beginPath();ctx.moveTo(xx,y);ctx.lineTo(xx,y+h);ctx.stroke();} for(let i=0;i<=4;i++){const value=ymax-(ymax-ymin)*i/4, yy=y+h*i/4;ctx.fillStyle='#64748b';ctx.fillText(value.toFixed(2),8,yy+4);ctx.strokeStyle='#eef2f7';ctx.beginPath();ctx.moveTo(x,yy);ctx.lineTo(x+w,yy);ctx.stroke();} }
-function draw() { const canvas=$('chart'),ctx=canvas.getContext('2d'),W=canvas.width,H=canvas.height;ctx.clearRect(0,0,W,H);ctx.fillStyle='#172033';ctx.font='bold 16px system-ui';ctx.fillText('Merchant profit rate（逐 cycle）',60,25); const x=60,y=45,w=W-90,h=320,ymin=-.15,ymax=.35; axis(ctx,x,y,w,h,sim?sim.cycles:500,ymin,ymax); const py=v=>y+h-(v-ymin)/(ymax-ymin)*h, px=i=>x+(i/Math.max(1,sim?sim.cycles-1:499))*w; if(sim){ctx.setLineDash([6,5]);ctx.strokeStyle='#dc2626';ctx.beginPath();ctx.moveTo(x,py(mean(sim.lower)));ctx.lineTo(x+w,py(mean(sim.lower)));ctx.stroke();ctx.strokeStyle='#d97706';ctx.beginPath();ctx.moveTo(x,py(mean(sim.upper)));ctx.lineTo(x+w,py(mean(sim.upper)));ctx.stroke();ctx.setLineDash([]); for(let j=0;j<sim.n;j++){const hist=sim.profitrate[j];ctx.strokeStyle=`hsl(${(j*360/Math.max(1,sim.n))},70%,45%)`;ctx.lineWidth=1.6;ctx.beginPath();hist.forEach((v,i)=>{const xx=px(i+1),yy=py(v);if(i)ctx.lineTo(xx,yy);else ctx.moveTo(xx,yy);});ctx.stroke();} } ctx.fillStyle='#172033';ctx.font='bold 16px system-ui';ctx.fillText('Latest bets by merchant',60,415); const by=435,bh=190; ctx.strokeStyle='#d7dee9';ctx.beginPath();ctx.moveTo(60,by+bh);ctx.lineTo(W-30,by+bh);ctx.stroke(); if(sim){const max=Math.max(1,...sim.latestBets),bw=(W-100)/sim.n*.75;sim.latestBets.forEach((v,j)=>{const bx=70+j*(W-100)/sim.n, barh=v/max*bh;ctx.fillStyle=`hsl(${(j*360/Math.max(1,sim.n))},70%,55%)`;ctx.fillRect(bx,by+bh-barh,bw,barh);ctx.fillStyle='#64748b';ctx.font='11px system-ui';ctx.fillText(j,bx+2,by+bh+15);});} }
-function updateTable(){const body=$('table').querySelector('tbody');body.innerHTML='';if(!sim)return;for(let j=0;j<sim.n;j++){const tr=document.createElement('tr');const rate=sim.latestRates[j]||0;tr.innerHTML=`<td>client ${j}</td><td>${rate.toFixed(6)}</td><td>${(sim.latestBets[j]||0).toFixed(2)}</td><td>${(sim.accumulatedBets[j]||0).toFixed(2)}</td>`;body.appendChild(tr);}}
-function doStep(){if(!sim)reset();if(sim.c>=sim.cycles){running=false;status('模擬已完成。');return;}const s=sim.step();draw();updateTable();status(`cycle ${sim.c}/${sim.cycles}｜selected position ${s.selected}｜${s.controlled?'controlled':'random'}｜actual control ${(sim.actualControl/sim.c*100).toFixed(2)}%`);if(sim.c>=sim.cycles){running=false;status(`完成 ${sim.cycles} cycles｜actual control ${(sim.actualControl/sim.cycles*100).toFixed(2)}%｜最後選點 ${s.selected}`);}}
-function loop(){if(!running)return;doStep();if(running&&sim.c<sim.cycles)setTimeout(loop,Math.max(0,Number($('delay').value)||0));}
-function downloadCSV(){if(!sim)return;let rows=['cycle,'+Array.from({length:sim.n},(_,i)=>`client_${i}`).join(',')];const hist=sim.history;hist.forEach((row,i)=>rows.push((i+1)+','+row.map(x=>x.toFixed(8)).join(',')));const blob=new Blob([rows.join('\n')],{type:'text/csv;charset=utf-8'}),a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='profitrate_realtime.csv';a.click();URL.revokeObjectURL(a.href);}
-$('start').onclick=()=>{running=false;try{reset();running=true;loop();}catch(e){status('參數錯誤：'+e.message);}};
-$('pause').onclick=()=>{running=false;status(sim?`已暫停於 cycle ${sim.c}/${sim.cycles}。`:'尚未開始。');};
-$('one').onclick=()=>{running=false;try{doStep();}catch(e){status('參數錯誤：'+e.message);}};
-$('csv').onclick=downloadCSV;
-try{reset();}catch(e){status(e.message);}
+let simulation = null;
+let running = false;
+
+function readConfig() {
+  const clients = Math.max(1, Math.trunc(Number($('clients').value) || 10));
+  const candidates = Math.trunc(Number($('candidates').value) || 100);
+  const cycles = Math.max(1, Math.trunc(Number($('cycles').value) || 500));
+  const controlrate = Number($('control').value) || 0;
+  if (candidates < 1 || candidates > MAX_CANDIDATES) {
+    throw new Error(`candidateCount 必須介於 1 到 ${MAX_CANDIDATES}`);
+  }
+  if (controlrate < 0 || controlrate > 100) throw new Error('controlrate 必須介於 0 到 100');
+  return {
+    clients, candidates, cycles, controlrate,
+    lower: $('lower').value,
+    upper: $('upper').value,
+    seed: $('seed').value === '' ? null : Number($('seed').value),
+  };
+}
+
+function setStatus(text, isError = false) {
+  const element = $('status');
+  element.textContent = text;
+  element.style.color = isError ? '#b42318' : '#475569';
+}
+
+function resetSimulation() {
+  simulation = new SimulationState(readConfig());
+  $('csv').disabled = false;
+  resetChoicePolicy(simulation.candidateCount);
+  drawMerchantCharts();
+  updateTable();
+  drawChoiceChart(null);
+  setStatus('已建立模擬，按開始或單步。');
+}
+
+function drawAxis(context, x, y, width, height, xMaximum, yMinimum, yMaximum) {
+  context.strokeStyle = '#d7dee9';
+  context.lineWidth = 1;
+  context.beginPath();
+  context.moveTo(x, y);
+  context.lineTo(x, y + height);
+  context.lineTo(x + width, y + height);
+  context.stroke();
+  for (let index = 0; index <= 5; index++) {
+    const xx = x + width * index / 5;
+    context.fillStyle = '#64748b';
+    context.font = '12px system-ui';
+    context.fillText(Math.round(xMaximum * index / 5), xx - 9, y + height + 18);
+    context.strokeStyle = '#eef2f7';
+    context.beginPath();
+    context.moveTo(xx, y);
+    context.lineTo(xx, y + height);
+    context.stroke();
+  }
+  for (let index = 0; index <= 4; index++) {
+    const value = yMaximum - (yMaximum - yMinimum) * index / 4;
+    const yy = y + height * index / 4;
+    context.fillStyle = '#64748b';
+    context.fillText(value.toFixed(2), 8, yy + 4);
+    context.strokeStyle = '#eef2f7';
+    context.beginPath();
+    context.moveTo(x, yy);
+    context.lineTo(x + width, yy);
+    context.stroke();
+  }
+}
+
+function drawMerchantCharts() {
+  const canvas = $('chart');
+  const context = canvas.getContext('2d');
+  const width = canvas.width;
+  const height = canvas.height;
+  context.clearRect(0, 0, width, height);
+  context.fillStyle = '#172033';
+  context.font = '600 16px system-ui';
+  context.fillText('Merchant profit rate（逐 cycle）', 60, 25);
+  const x = 60;
+  const y = 45;
+  const plotWidth = width - 90;
+  const plotHeight = 290;
+  const yMinimum = -0.15;
+  const yMaximum = 0.35;
+  drawAxis(context, x, y, plotWidth, plotHeight, simulation ? simulation.cycles : 500, yMinimum, yMaximum);
+  const projectY = value => y + plotHeight - (value - yMinimum) / (yMaximum - yMinimum) * plotHeight;
+  const projectX = index => x + index / Math.max(1, simulation ? simulation.cycles - 1 : 499) * plotWidth;
+  if (simulation) {
+    context.setLineDash([6, 5]);
+    context.strokeStyle = '#dc2626';
+    context.beginPath();
+    context.moveTo(x, projectY(mean(simulation.lower)));
+    context.lineTo(x + plotWidth, projectY(mean(simulation.lower)));
+    context.stroke();
+    context.strokeStyle = '#d97706';
+    context.beginPath();
+    context.moveTo(x, projectY(mean(simulation.upper)));
+    context.lineTo(x + plotWidth, projectY(mean(simulation.upper)));
+    context.stroke();
+    context.setLineDash([]);
+    for (let client = 0; client < simulation.clientCount; client++) {
+      const history = simulation.profitrate[client];
+      const stride = Math.max(1, Math.ceil(history.length / Math.max(240, Math.floor(plotWidth * 1.5))));
+      context.strokeStyle = `hsl(${client * 360 / Math.max(1, simulation.clientCount)},70%,45%)`;
+      context.lineWidth = 1.6;
+      context.beginPath();
+      let started = false;
+      for (let index = 0; index < history.length; index += stride) {
+        const xx = projectX(index + 1);
+        const yy = projectY(history[index]);
+        if (started) context.lineTo(xx, yy);
+        else { context.moveTo(xx, yy); started = true; }
+      }
+      context.stroke();
+    }
+  }
+
+  context.fillStyle = '#172033';
+  context.font = '600 16px system-ui';
+  context.fillText('Latest bets by merchant', 60, 395);
+  const barY = 415;
+  const barHeight = 180;
+  context.strokeStyle = '#d7dee9';
+  context.beginPath();
+  context.moveTo(60, barY + barHeight);
+  context.lineTo(width - 30, barY + barHeight);
+  context.stroke();
+  if (simulation) {
+    const maximum = Math.max(1, ...simulation.latestBets);
+    const slotWidth = (width - 100) / simulation.clientCount;
+    const barWidth = slotWidth * 0.75;
+    simulation.latestBets.forEach((value, client) => {
+      const barX = 70 + client * slotWidth;
+      const renderedHeight = value / maximum * barHeight;
+      context.fillStyle = `hsl(${client * 360 / Math.max(1, simulation.clientCount)},70%,55%)`;
+      context.fillRect(barX, barY + barHeight - renderedHeight, barWidth, renderedHeight);
+      context.fillStyle = '#64748b';
+      context.font = '11px system-ui';
+      context.fillText(client, barX + 2, barY + barHeight + 15);
+    });
+  }
+}
+
+const choiceView = {
+  yaw: -0.78, pitch: 0.55, zoom: 1, dragging: false,
+  pointerId: null, lastX: 0, lastY: 0, hitFaces: [],
+};
+const choiceRender = {
+  baseEvery: 1, every: 1, minimumMs: 50, lastAt: 0,
+  renderedCycle: -1, durationEma: 0, fastFrames: 0,
+};
+
+function resetChoicePolicy(candidateCount) {
+  choiceRender.baseEvery = clamp(Math.ceil(candidateCount / 40), 1, 50);
+  choiceRender.every = choiceRender.baseEvery;
+  choiceRender.minimumMs = Math.round(clamp(30 + candidateCount * 0.7, 50, 250));
+  choiceRender.lastAt = 0;
+  choiceRender.renderedCycle = -1;
+  choiceRender.durationEma = 0;
+  choiceRender.fastFrames = 0;
+  updateChoicePolicyLabel();
+}
+
+function updateChoicePolicyLabel() {
+  const shown = choiceRender.renderedCycle < 0 ? '尚未繪製' : `顯示 cycle ${choiceRender.renderedCycle + 1}`;
+  $('choicePolicy').textContent = `Auto：每 ${choiceRender.every} 期 · ≥${choiceRender.minimumMs}ms · ${shown}`;
+}
+
+function shade(hex, factor) {
+  const value = hex.replace('#', '');
+  const channels = [0, 2, 4].map(index => clamp(
+    Math.round(parseInt(value.slice(index, index + 2), 16) * factor), 0, 255,
+  ));
+  return `rgb(${channels[0]},${channels[1]},${channels[2]})`;
+}
+
+function projectPoint(point, geometry) {
+  const cosYaw = Math.cos(choiceView.yaw);
+  const sinYaw = Math.sin(choiceView.yaw);
+  const rotatedX = point.x * cosYaw - point.y * sinYaw;
+  const depth = point.x * sinYaw + point.y * cosYaw;
+  return {
+    x: geometry.centerX + rotatedX * geometry.scale,
+    y: geometry.centerY + (depth * Math.sin(choiceView.pitch) - point.z * Math.cos(choiceView.pitch)) * geometry.scale,
+    depth: depth * Math.cos(choiceView.pitch) + point.z * Math.sin(choiceView.pitch),
+  };
+}
+
+function cuboidFaces(bounds, color, candidate, side, geometry) {
+  const points = [
+    { x: bounds.x0, y: bounds.y0, z: bounds.z0 },
+    { x: bounds.x1, y: bounds.y0, z: bounds.z0 },
+    { x: bounds.x1, y: bounds.y1, z: bounds.z0 },
+    { x: bounds.x0, y: bounds.y1, z: bounds.z0 },
+    { x: bounds.x0, y: bounds.y0, z: bounds.z1 },
+    { x: bounds.x1, y: bounds.y0, z: bounds.z1 },
+    { x: bounds.x1, y: bounds.y1, z: bounds.z1 },
+    { x: bounds.x0, y: bounds.y1, z: bounds.z1 },
+  ].map(point => projectPoint(point, geometry));
+  const definitions = [
+    { indices: [0, 1, 2, 3], light: 0.70 },
+    { indices: [4, 5, 6, 7], light: 1.12 },
+    { indices: [0, 1, 5, 4], light: 0.86 },
+    { indices: [1, 2, 6, 5], light: 0.72 },
+    { indices: [2, 3, 7, 6], light: 0.92 },
+    { indices: [3, 0, 4, 7], light: 0.78 },
+  ];
+  return definitions.map(definition => {
+    const polygon = definition.indices.map(index => points[index]);
+    return {
+      candidate, side, polygon,
+      depth: mean(polygon.map(point => point.depth)),
+      fill: shade(color, definition.light),
+    };
+  });
+}
+
+function pointInPolygon(x, y, polygon) {
+  let inside = false;
+  for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
+    const xi = polygon[i].x;
+    const yi = polygon[i].y;
+    const xj = polygon[j].x;
+    const yj = polygon[j].y;
+    const intersects = (yi > y) !== (yj > y)
+      && x < (xj - xi) * (y - yi) / ((yj - yi) || 1e-9) + xi;
+    if (intersects) inside = !inside;
+  }
+  return inside;
+}
+
+function drawChoiceChart(snapshot) {
+  const canvas = $('choice3d');
+  const context = canvas.getContext('2d');
+  const width = canvas.width;
+  const height = canvas.height;
+  context.clearRect(0, 0, width, height);
+  const candidateCount = simulation ? simulation.candidateCount : 100;
+  const wanted = snapshot ? snapshot.wanted : Array(candidateCount).fill(0);
+  const unwanted = snapshot ? snapshot.unwanted : Array(candidateCount).fill(0);
+  const blacked = snapshot ? snapshot.blacked : Array(candidateCount).fill(0);
+  const considered = new Set(snapshot ? snapshot.considered : []);
+  const selected = snapshot ? snapshot.selected : -1;
+  const columns = Math.ceil(Math.sqrt(candidateCount));
+  const rows = Math.ceil(candidateCount / columns);
+  const footprint = Math.max(columns, rows, 1);
+  const maximumExtent = Math.max(1, ...wanted, ...unwanted);
+  const verticalWorld = footprint * 0.68;
+  const scale = Math.min(width / (footprint * 1.85), height / (footprint * 2.25)) * choiceView.zoom;
+  const geometry = { centerX: width * 0.50, centerY: height * 0.53, scale };
+
+  context.fillStyle = '#172033';
+  context.font = '600 14px system-ui';
+  const cycleText = snapshot ? `cycle ${snapshot.cycle + 1}` : 'ready';
+  const selectionText = snapshot
+    ? `selected ${snapshot.selected} · ${snapshot.controlled ? 'Controlled' : 'Random'}`
+    : `${candidateCount} candidates`;
+  context.fillText(`${cycleText} · ${selectionText}`, 18, 24);
+  context.fillStyle = '#64748b';
+  context.font = '12px system-ui';
+  context.fillText(`max scale ±${maximumExtent}`, 18, 43);
+
+  context.strokeStyle = '#d7dee9';
+  context.lineWidth = 1;
+  for (let column = 0; column <= columns; column++) {
+    const start = projectPoint({ x: column - columns / 2, y: -rows / 2, z: 0 }, geometry);
+    const end = projectPoint({ x: column - columns / 2, y: rows / 2, z: 0 }, geometry);
+    context.beginPath();
+    context.moveTo(start.x, start.y);
+    context.lineTo(end.x, end.y);
+    context.stroke();
+  }
+  for (let row = 0; row <= rows; row++) {
+    const start = projectPoint({ x: -columns / 2, y: row - rows / 2, z: 0 }, geometry);
+    const end = projectPoint({ x: columns / 2, y: row - rows / 2, z: 0 }, geometry);
+    context.beginPath();
+    context.moveTo(start.x, start.y);
+    context.lineTo(end.x, end.y);
+    context.stroke();
+  }
+
+  const faces = [];
+  const barWidth = 0.76;
+  const minimumHeight = 0.025;
+  for (let candidate = 0; candidate < candidateCount; candidate++) {
+    const column = candidate % columns;
+    const row = Math.floor(candidate / columns);
+    const x0 = column - columns / 2 + (1 - barWidth) / 2;
+    const y0 = row - rows / 2 + (1 - barWidth) / 2;
+    const x1 = x0 + barWidth;
+    const y1 = y0 + barWidth;
+    const wantedHeight = Math.max(minimumHeight, wanted[candidate] / maximumExtent * verticalWorld);
+    const unwantedHeight = Math.max(minimumHeight, unwanted[candidate] / maximumExtent * verticalWorld);
+    const color = candidate === selected
+      ? COLORS.red : considered.has(candidate) ? COLORS.yellow : COLORS.green;
+    faces.push(...cuboidFaces(
+      { x0, x1, y0, y1, z0: 0, z1: wantedHeight }, color, candidate, 'wanted', geometry,
+    ));
+    faces.push(...cuboidFaces(
+      { x0, x1, y0, y1, z0: -unwantedHeight, z1: 0 }, color, candidate, 'unwanted', geometry,
+    ));
+  }
+  faces.sort((left, right) => left.depth - right.depth);
+  choiceView.hitFaces = [];
+  for (const face of faces) {
+    context.fillStyle = face.fill;
+    context.strokeStyle = '#17203333';
+    context.lineWidth = 0.7;
+    context.beginPath();
+    context.moveTo(face.polygon[0].x, face.polygon[0].y);
+    for (let index = 1; index < face.polygon.length; index++) {
+      context.lineTo(face.polygon[index].x, face.polygon[index].y);
+    }
+    context.closePath();
+    context.fill();
+    context.stroke();
+    choiceView.hitFaces.push(face);
+  }
+
+  const axisBase = { x: -columns / 2 - 0.35, y: -rows / 2 - 0.35 };
+  const axisBottom = projectPoint({ ...axisBase, z: -verticalWorld }, geometry);
+  const axisZero = projectPoint({ ...axisBase, z: 0 }, geometry);
+  const axisTop = projectPoint({ ...axisBase, z: verticalWorld }, geometry);
+  context.strokeStyle = '#475569';
+  context.lineWidth = 1.3;
+  context.beginPath();
+  context.moveTo(axisBottom.x, axisBottom.y);
+  context.lineTo(axisTop.x, axisTop.y);
+  context.stroke();
+  context.fillStyle = '#475569';
+  context.font = '12px system-ui';
+  context.fillText(`+${maximumExtent}`, axisTop.x + 5, axisTop.y + 4);
+  context.fillText('0', axisZero.x + 5, axisZero.y + 4);
+  context.fillText(`−${maximumExtent}`, axisBottom.x + 5, axisBottom.y + 4);
+
+  canvas.dataset.wanted = JSON.stringify(wanted);
+  canvas.dataset.unwanted = JSON.stringify(unwanted);
+  canvas.dataset.blacked = JSON.stringify(blacked);
+  canvas.dataset.considered = JSON.stringify([...considered]);
+  canvas.dataset.selected = String(selected);
+}
+
+function maybeDrawChoice(snapshot, force = false) {
+  const now = performance.now();
+  if (!force) {
+    if ((snapshot.cycle + 1) % choiceRender.every !== 0) return;
+    if (now - choiceRender.lastAt < choiceRender.minimumMs) return;
+  }
+  const started = performance.now();
+  drawChoiceChart(snapshot);
+  const duration = performance.now() - started;
+  choiceRender.durationEma = choiceRender.durationEma
+    ? choiceRender.durationEma * 0.75 + duration * 0.25 : duration;
+  choiceRender.lastAt = performance.now();
+  choiceRender.renderedCycle = snapshot.cycle;
+  if (choiceRender.durationEma > 120) {
+    choiceRender.every = clamp(
+      Math.max(choiceRender.every + 1, Math.ceil(choiceRender.every * choiceRender.durationEma / 90)),
+      choiceRender.baseEvery,
+      50,
+    );
+    choiceRender.fastFrames = 0;
+  } else if (choiceRender.durationEma < 45) {
+    choiceRender.fastFrames++;
+    if (choiceRender.fastFrames >= 5 && choiceRender.every > choiceRender.baseEvery) {
+      choiceRender.every--;
+      choiceRender.fastFrames = 0;
+    }
+  } else choiceRender.fastFrames = 0;
+  updateChoicePolicyLabel();
+}
+
+function canvasPoint(event, canvas) {
+  const rectangle = canvas.getBoundingClientRect();
+  return {
+    x: (event.clientX - rectangle.left) * canvas.width / rectangle.width,
+    y: (event.clientY - rectangle.top) * canvas.height / rectangle.height,
+    cssX: event.clientX - rectangle.left,
+    cssY: event.clientY - rectangle.top,
+  };
+}
+
+function hideChoiceTooltip() { $('choiceTooltip').style.display = 'none'; }
+
+function showChoiceTooltip(event) {
+  if (!simulation || !simulation.latestChoice || choiceView.dragging) {
+    hideChoiceTooltip();
+    return;
+  }
+  const canvas = $('choice3d');
+  const point = canvasPoint(event, canvas);
+  let hit = null;
+  for (let index = choiceView.hitFaces.length - 1; index >= 0; index--) {
+    if (pointInPolygon(point.x, point.y, choiceView.hitFaces[index].polygon)) {
+      hit = choiceView.hitFaces[index];
+      break;
+    }
+  }
+  if (!hit) { hideChoiceTooltip(); return; }
+  const snapshot = simulation.latestChoice;
+  const candidate = hit.candidate;
+  const state = candidate === snapshot.selected
+    ? `${snapshot.controlled ? 'Controlled' : 'Random'} selected`
+    : snapshot.considered.includes(candidate) ? 'Wanted-stage candidate' : 'Other candidate';
+  const tooltip = $('choiceTooltip');
+  tooltip.innerHTML = `<strong>candidate ${candidate}</strong><br>`
+    + `wanted: ${snapshot.wanted[candidate]}<br>`
+    + `unwanted: ${snapshot.unwanted[candidate]}<br>`
+    + `blacked: ${snapshot.blacked[candidate]}<br>${state}`;
+  tooltip.style.display = 'block';
+  tooltip.style.left = `${Math.min(point.cssX + 12, canvas.clientWidth - 210)}px`;
+  tooltip.style.top = `${Math.max(6, point.cssY - 42)}px`;
+}
+
+const choiceCanvas = $('choice3d');
+choiceCanvas.addEventListener('pointerdown', event => {
+  choiceView.dragging = true;
+  choiceView.pointerId = event.pointerId;
+  choiceView.lastX = event.clientX;
+  choiceView.lastY = event.clientY;
+  choiceCanvas.classList.add('dragging');
+  choiceCanvas.setPointerCapture(event.pointerId);
+  hideChoiceTooltip();
+});
+choiceCanvas.addEventListener('pointermove', event => {
+  if (!choiceView.dragging) { showChoiceTooltip(event); return; }
+  const deltaX = event.clientX - choiceView.lastX;
+  const deltaY = event.clientY - choiceView.lastY;
+  choiceView.yaw += deltaX * 0.008;
+  choiceView.pitch = clamp(choiceView.pitch - deltaY * 0.006, 0.14, 1.28);
+  choiceView.lastX = event.clientX;
+  choiceView.lastY = event.clientY;
+  drawChoiceChart(simulation ? simulation.latestChoice : null);
+});
+choiceCanvas.addEventListener('pointerup', event => {
+  choiceView.dragging = false;
+  choiceCanvas.classList.remove('dragging');
+  if (choiceView.pointerId !== null) choiceCanvas.releasePointerCapture(event.pointerId);
+  choiceView.pointerId = null;
+});
+choiceCanvas.addEventListener('pointerleave', () => {
+  if (!choiceView.dragging) hideChoiceTooltip();
+});
+choiceCanvas.addEventListener('wheel', event => {
+  event.preventDefault();
+  choiceView.zoom = clamp(choiceView.zoom * (event.deltaY < 0 ? 1.08 : 0.92), 0.55, 2.2);
+  drawChoiceChart(simulation ? simulation.latestChoice : null);
+}, { passive: false });
+choiceCanvas.addEventListener('dblclick', () => {
+  choiceView.yaw = -0.78;
+  choiceView.pitch = 0.55;
+  choiceView.zoom = 1;
+  drawChoiceChart(simulation ? simulation.latestChoice : null);
+});
+
+function updateTable() {
+  const body = $('table').querySelector('tbody');
+  body.innerHTML = '';
+  if (!simulation) return;
+  for (let client = 0; client < simulation.clientCount; client++) {
+    const row = document.createElement('tr');
+    const rate = simulation.latestRates[client] || 0;
+    row.innerHTML = `<td>client ${client}</td><td>${rate.toFixed(6)}</td>`
+      + `<td>${(simulation.latestBets[client] || 0).toFixed(2)}</td>`
+      + `<td>${(simulation.accumulatedBetTotals[client] || 0).toFixed(2)}</td>`;
+    body.appendChild(row);
+  }
+}
+
+function doStep(forceChoice = false) {
+  if (!simulation) resetSimulation();
+  if (simulation.cycle >= simulation.cycles) {
+    running = false;
+    setStatus('模擬已完成。');
+    return;
+  }
+  const snapshot = simulation.step();
+  drawMerchantCharts();
+  updateTable();
+  const terminal = simulation.cycle === simulation.cycles;
+  maybeDrawChoice(snapshot, forceChoice || simulation.cycle === 1 || terminal);
+  setStatus(`cycle ${simulation.cycle}/${simulation.cycles}`
+    + `｜candidates ${simulation.candidateCount}`
+    + `｜selected ${snapshot.selected}`
+    + `｜${snapshot.controlled ? 'Controlled' : 'Random'}`
+    + `｜actual control ${(simulation.actualControl / simulation.cycle * 100).toFixed(2)}%`);
+  if (terminal) {
+    running = false;
+    setStatus(`完成 ${simulation.cycles} cycles`
+      + `｜actual control ${(simulation.actualControl / simulation.cycles * 100).toFixed(2)}%`
+      + `｜最後選點 ${snapshot.selected}`);
+  }
+}
+
+function runLoop() {
+  if (!running) return;
+  doStep(false);
+  if (running && simulation.cycle < simulation.cycles) {
+    setTimeout(runLoop, Math.max(0, Number($('delay').value) || 0));
+  }
+}
+
+function downloadCSV() {
+  if (!simulation) return;
+  const rows = [
+    'cycle,' + Array.from({ length: simulation.clientCount }, (_, index) => `client_${index}`).join(','),
+  ];
+  simulation.history.forEach((row, index) => {
+    rows.push((index + 1) + ',' + row.map(value => value.toFixed(8)).join(','));
+  });
+  const blob = new Blob([rows.join('\n')], { type: 'text/csv;charset=utf-8' });
+  const link = document.createElement('a');
+  link.href = URL.createObjectURL(blob);
+  link.download = 'profitrate_realtime.csv';
+  link.click();
+  URL.revokeObjectURL(link.href);
+}
+
+$('start').addEventListener('click', () => {
+  running = false;
+  try {
+    resetSimulation();
+    running = true;
+    runLoop();
+  } catch (error) { setStatus(`參數錯誤：${error.message}`, true); }
+});
+$('pause').addEventListener('click', () => {
+  running = false;
+  if (simulation && simulation.latestChoice) maybeDrawChoice(simulation.latestChoice, true);
+  setStatus(simulation ? `已暫停於 cycle ${simulation.cycle}/${simulation.cycles}。` : '尚未開始。');
+});
+$('one').addEventListener('click', () => {
+  running = false;
+  try { doStep(true); }
+  catch (error) { setStatus(`參數錯誤：${error.message}`, true); }
+});
+$('csv').addEventListener('click', downloadCSV);
+
+try { resetSimulation(); }
+catch (error) { setStatus(error.message, true); }
 </script>
 </body>
 </html>

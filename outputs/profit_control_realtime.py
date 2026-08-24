@@ -25,7 +25,7 @@ from typing import Any, Iterable
 import numpy as np
 
 
-NUMBERS = 100
+DEFAULT_CANDIDATE_COUNT = 100
 INTERVAL = 30
 ENHANCED = 2
 UL = -0.05
@@ -134,6 +134,11 @@ class CycleSnapshot:
     latest_profitrates: list[float]
     latest_bets: list[float]
     accumulated_bets: list[float]
+    wanted: list[int]
+    unwanted: list[int]
+    blacked: list[int]
+    considered_candidates: list[int]
+    finalist_candidates: list[int]
 
 
 class SimulationState:
@@ -144,23 +149,29 @@ class SimulationState:
         lowerbounds: str | float | Iterable[float] = "0.0",
         upperbounds: str | float | Iterable[float] = "0.03",
         runclients: int = 10,
+        candidate_count: int = DEFAULT_CANDIDATE_COUNT,
         cycles: int = 500,
         controlrate: float = 0.0,
         seed: int | None = None,
     ) -> None:
         if runclients < 1:
             raise ValueError("runclients must be at least 1")
+        if candidate_count < 1:
+            raise ValueError("candidate_count must be at least 1")
+        if candidate_count > 1000:
+            raise ValueError("candidate_count must be 1000 or less")
         if cycles < 1:
             raise ValueError("cycles must be at least 1")
         if not 0 <= controlrate <= 100:
             raise ValueError("controlrate must be between 0 and 100")
         self.runclients = int(runclients)
+        self.candidate_count = int(candidate_count)
         self.cycles = int(cycles)
         self.controlrate = float(controlrate)
         self.lowerbounds = expand_bound(lowerbounds, self.runclients)
         self.upperbounds = expand_bound(upperbounds, self.runclients)
         self.rng = np.random.default_rng(seed)
-        self.source = np.arange(NUMBERS)
+        self.source = np.arange(self.candidate_count)
         self.cycle_index = 0
         self.actualcontrolcount = 0
         self.collectivebets = [[] for _ in range(self.runclients)]
@@ -191,9 +202,14 @@ class SimulationState:
 
     def _make_bets(self, cycle: int, client: int) -> tuple[np.ndarray, np.ndarray]:
         """Generate the normal and controlled-player bets for one client."""
-        betcounts = int(self.rng.integers(43, 63))
+        # The original 100-candidate model samples 43-62 normal positions and
+        # 10-99 controlled-player positions.  Scale those densities with the
+        # candidate count so small candidate spaces do not become saturated.
+        normal_low = max(1, int(np.ceil(self.candidate_count * 0.43)))
+        normal_high = max(normal_low, int(np.floor(self.candidate_count * 0.62)))
+        betcounts = int(self.rng.integers(normal_low, normal_high + 1))
         betnumbers = self.rng.choice(self.source, size=betcounts, replace=False)
-        locatingbets = np.zeros(NUMBERS, dtype=float)
+        locatingbets = np.zeros(self.candidate_count, dtype=float)
         level = self.rng.permutation([0, 1])
         thissales = np.arange(1, len(level) + 1) * level
         for index in betnumbers:
@@ -211,9 +227,11 @@ class SimulationState:
                     abs(2 + np.sin((cycle - index - self.cpd[client]) * 2 * np.pi / self.cycles)), 2
                 )
 
-        specificbets = np.zeros(NUMBERS, dtype=float)
+        specificbets = np.zeros(self.candidate_count, dtype=float)
         if client in range(self.runclients):
-            specificbetcounts = int(self.rng.integers(10, 100))
+            specific_low = max(1, int(np.ceil(self.candidate_count * 0.10)))
+            specific_high = max(specific_low, int(np.floor(self.candidate_count * 0.99)))
+            specificbetcounts = int(self.rng.integers(specific_low, specific_high + 1))
             specificbetnumbers = self.rng.choice(self.source, size=specificbetcounts)
             for index in specificbetnumbers:
                 # ``thissales`` is deliberately the same level used by the
@@ -227,13 +245,17 @@ class SimulationState:
         if self.cycle_index >= self.cycles:
             raise StopIteration("Simulation has completed")
         c = self.cycle_index
-        wanted = np.zeros(NUMBERS, dtype=int)
-        unwanted = np.zeros(NUMBERS, dtype=int)
-        blacked = np.zeros(NUMBERS, dtype=int)
+        wanted = np.zeros(self.candidate_count, dtype=int)
+        unwanted = np.zeros(self.candidate_count, dtype=int)
+        blacked = np.zeros(self.candidate_count, dtype=int)
         eachclientbets = np.zeros(self.runclients, dtype=float)
-        eachclientbonustable = [np.zeros(NUMBERS, dtype=float) for _ in range(self.runclients)]
+        eachclientbonustable = [
+            np.zeros(self.candidate_count, dtype=float) for _ in range(self.runclients)
+        ]
         eachclientplayerbets = np.zeros(self.runclients, dtype=float)
-        eachclientplayerbonustable = [np.zeros(NUMBERS, dtype=float) for _ in range(self.runclients)]
+        eachclientplayerbonustable = [
+            np.zeros(self.candidate_count, dtype=float) for _ in range(self.runclients)
+        ]
         jumpactivated = False
         voting = np.ones(self.runclients, dtype=int)
         voting[7 : min(9, self.runclients)] = 3
@@ -269,7 +291,7 @@ class SimulationState:
                         voting[j] *= multiplier
 
             specificsum = float(np.sum(specificbets))
-            specificbonus = NUMBERS * specificbets * 0.98
+            specificbonus = self.candidate_count * specificbets * 0.98
             if specificsum != 0:
                 specific_profit = (
                     self.controledplayerbonus[j] + specificbonus
@@ -280,11 +302,11 @@ class SimulationState:
             eachclientplayerbets[j] = specificsum
             eachclientplayerbonustable[j] = specificbonus
             eachclientbets[j] = np.sum(locatingbets)
-            eachclientbonustable[j] = NUMBERS * locatingbets * 0.98
+            eachclientbonustable[j] = self.candidate_count * locatingbets * 0.98
             each_number_profitrate = (
                 1 - eachclientbonustable[j] / eachclientbets[j]
                 if eachclientbets[j] != 0
-                else np.zeros(NUMBERS)
+                else np.zeros(self.candidate_count)
             )
             if c > 0:
                 self.accubets[j] += self.collectivebets[j][-1]
@@ -305,7 +327,7 @@ class SimulationState:
                 accumulated_profitrate = 1 - accumulated_total_bonus / accumulated_total_bets
                 current_rate = self.profitrate[j][-1]
                 if current_rate < self.lowerbounds[j]:
-                    for index in range(NUMBERS):
+                    for index in range(self.candidate_count):
                         if current_rate > UL:
                             if each_number_profitrate[index] > self.lowerbounds[j]:
                                 wanted[index] += 1
@@ -317,13 +339,13 @@ class SimulationState:
                             elif each_number_profitrate[index] <= HUL or accumulated_profitrate[index] <= current_rate:
                                 unwanted[index] += voting[j] * (abs(int(each_number_profitrate[index])) + 1)
                 elif current_rate > self.upperbounds[j]:
-                    for index in range(NUMBERS):
+                    for index in range(self.candidate_count):
                         if accumulated_profitrate[index] >= self.lowerbounds[j] and each_number_profitrate[index] < current_rate:
                             wanted[index] += 1
                         elif each_number_profitrate[index] <= HUL or each_number_profitrate[index] <= self.lowerbounds[j]:
                             unwanted[index] += voting[j] * (abs(int(each_number_profitrate[index])) + 1)
                 else:
-                    for index in range(NUMBERS):
+                    for index in range(self.candidate_count):
                         if each_number_profitrate[index] <= UL:
                             unwanted[index] += 1
                         if each_number_profitrate[index] <= HUL:
@@ -377,9 +399,11 @@ class SimulationState:
             }
             final_wanted_result = [item for item in preprocessing if deep[item] == max(deep.values())]
         else:
-            final_wanted_result = np.flatnonzero(wanted == maximum_wanted).tolist()
+            preprocessing = np.flatnonzero(wanted == maximum_wanted).tolist()
+            final_wanted_result = preprocessing.copy()
         if not final_wanted_result:
-            final_wanted_result = list(range(NUMBERS))
+            preprocessing = list(range(self.candidate_count))
+            final_wanted_result = preprocessing.copy()
 
         roll = bool(jumpactivated and self.rng.random() < 0.3)
         controlled = bool(self.rng.integers(0, 100) < self.controlrate or roll)
@@ -408,6 +432,11 @@ class SimulationState:
             latest_profitrates=latest_profitrates,
             latest_bets=eachclientbets.tolist(),
             accumulated_bets=accumulated_bets,
+            wanted=wanted.tolist(),
+            unwanted=unwanted.tolist(),
+            blacked=blacked.tolist(),
+            considered_candidates=preprocessing,
+            finalist_candidates=final_wanted_result,
         )
         self.cycle_index += 1
         return snapshot
@@ -468,6 +497,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--lowerbounds", default="0.0", help="one value or comma-separated per-client values")
     parser.add_argument("--upperbounds", default="0.03", help="one value or comma-separated per-client values")
     parser.add_argument("--runclients", type=int, default=10)
+    parser.add_argument(
+        "--candidate-count",
+        type=int,
+        default=DEFAULT_CANDIDATE_COUNT,
+        help="number of discrete candidate positions (1 to 1000)",
+    )
     parser.add_argument("--cycles", type=int, default=500)
     parser.add_argument("--controlrate", type=float, default=0.0, help="0 to 100 percent")
     parser.add_argument("--seed", type=int, default=None, help="optional random seed")
@@ -484,6 +519,7 @@ def main() -> None:
         lowerbounds=args.lowerbounds,
         upperbounds=args.upperbounds,
         runclients=args.runclients,
+        candidate_count=args.candidate_count,
         cycles=args.cycles,
         controlrate=args.controlrate,
         seed=args.seed,
@@ -513,6 +549,7 @@ def main() -> None:
     summary = {
         "cycles": state.cycles,
         "runclients": state.runclients,
+        "candidate_count": state.candidate_count,
         "lowerbounds": state.lowerbounds.tolist(),
         "upperbounds": state.upperbounds.tolist(),
         "controlrate": state.controlrate,

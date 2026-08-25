@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Profit Control 即時動態模擬</title>
+  <title>Multi-Channel Cash-Flow Balancing Simulator</title>
   <style>
     :root {
       color-scheme: light;
@@ -127,19 +127,19 @@
 </head>
 <body>
 <main>
-  <h1>Profit Control 即時動態模擬</h1>
-  <p class="intro">每個 cycle 完整計算模型；2D 結果即時更新，3D wanted／unwanted 圖依候選數量與裝置速度自動節流。</p>
+  <h1>Multi-Channel Cash-Flow Balancing Simulator</h1>
+  <p class="intro">每個結算週期完整評估多個決策方案；2D 即時呈現商戶結算邊際與資金流入，3D 圖依方案數量與裝置速度自動調節更新頻率。</p>
 
-  <section class="panel" aria-label="Simulation controls">
+  <section class="panel" aria-label="Cash-flow simulation controls">
     <div class="controls">
-      <label>lowerbounds（單值或逗號分隔）<input id="lower" value="0.0"></label>
-      <label>upperbounds（單值或逗號分隔）<input id="upper" value="0.03"></label>
-      <label>runclients<input id="clients" type="number" min="1" value="10"></label>
-      <label>candidateCount<input id="candidates" type="number" min="1" max="1000" value="100"></label>
-      <label>cycles<input id="cycles" type="number" min="1" value="500"></label>
-      <label>controlrate（0–100%）<input id="control" type="number" min="0" max="100" step="0.1" value="0"></label>
-      <label>seed（可留白）<input id="seed" type="number" placeholder="random"></label>
-      <label>每步延遲 ms<input id="delay" type="number" min="0" value="35"></label>
+      <label>Target Margin Floor（單值或逗號分隔）<input id="lower" value="0.0"></label>
+      <label>Target Margin Ceiling（單值或逗號分隔）<input id="upper" value="0.03"></label>
+      <label>Merchant Count<input id="clients" type="number" min="1" value="10"></label>
+      <label>Decision Option Count<input id="candidates" type="number" min="1" max="1000" value="100"></label>
+      <label>Simulation Periods<input id="cycles" type="number" min="1" value="500"></label>
+      <label>Policy Application Rate（0–100%）<input id="control" type="number" min="0" max="100" step="0.1" value="0"></label>
+      <label>Seed（可留白）<input id="seed" type="number" placeholder="random"></label>
+      <label>每期延遲 ms<input id="delay" type="number" min="0" value="35"></label>
     </div>
     <div class="actions">
       <button id="start">開始／重新開始</button>
@@ -154,24 +154,24 @@
     <section class="panel chart-panel">
       <div class="chart-heading">
         <h2>Merchant results</h2>
-        <span class="chart-meta">Profit rate 與當期投注</span>
+        <span class="chart-meta">Settlement margin 與當期資金流入</span>
       </div>
-      <canvas id="chart" width="900" height="650" role="img" aria-label="各商戶 profit rate 折線與當期投注柱狀圖"></canvas>
+      <canvas id="chart" width="900" height="650" role="img" aria-label="各商戶結算邊際折線與當期資金流入柱狀圖"></canvas>
     </section>
 
     <section class="panel chart-panel">
       <div class="chart-heading">
-        <h2>Wanted ↑ / Unwanted ↓</h2>
+        <h2>Stability Support ↑ / Risk Exposure ↓</h2>
         <span id="choicePolicy" class="chart-meta">3D auto refresh</span>
       </div>
       <div class="choice-wrap">
-        <canvas id="choice3d" width="900" height="650" role="img" aria-label="候選項 wanted 向上、unwanted 向下的可旋轉三維柱狀圖"></canvas>
+        <canvas id="choice3d" width="900" height="650" role="img" aria-label="決策方案穩定支持分數向上、風險暴露分數向下的可旋轉三維柱狀圖"></canvas>
         <div id="choiceTooltip" class="choice-tooltip" role="tooltip"></div>
       </div>
       <div class="legend" aria-label="3D chart legend">
-        <span><i class="swatch green"></i>一般候選</span>
-        <span><i class="swatch yellow"></i>Wanted 階段候選</span>
-        <span><i class="swatch red"></i>當期實際選點</span>
+        <span><i class="swatch green"></i>可用方案</span>
+        <span><i class="swatch yellow"></i>Policy Shortlist</span>
+        <span><i class="swatch red"></i>Executed Option</span>
         <span>拖曳旋轉 · 滾輪縮放 · 雙擊重設</span>
       </div>
     </section>
@@ -179,11 +179,11 @@
 
   <section class="panel result">
     <table id="table">
-      <thead><tr><th>Merchant</th><th>Final profit rate</th><th>Latest bets</th><th>Accumulated bets</th></tr></thead>
+      <thead><tr><th>Merchant</th><th>Final settlement margin</th><th>Current-period inflow</th><th>Cumulative inflow</th></tr></thead>
       <tbody></tbody>
     </table>
   </section>
-  <p class="note">模型保留原始投注、wanted / unwanted / blacked 投票與 controlrate 選點流程。候選數改變時，投注位置數按原始 100 候選模型的比例縮放；3D 圖只顯示當期 snapshot，不改變選點結果。</p>
+  <p class="note">每一期代表一個結算窗口：系統比較多個決策方案對各商戶 Settlement Margin 的 Stability Support 與 Risk Exposure，再依 Policy Application Rate 執行政策引導或基準抽樣。方案數量改變時，交易曝險分布按 100 個方案的基準同比例縮放；3D snapshot 只呈現當期評估，不改變決策結果。</p>
 </main>
 
 <script>
@@ -583,9 +583,9 @@ function readConfig() {
   const cycles = Math.max(1, Math.trunc(Number($('cycles').value) || 500));
   const controlrate = Number($('control').value) || 0;
   if (candidates < 1 || candidates > MAX_CANDIDATES) {
-    throw new Error(`candidateCount 必須介於 1 到 ${MAX_CANDIDATES}`);
+    throw new Error(`Decision Option Count 必須介於 1 到 ${MAX_CANDIDATES}`);
   }
-  if (controlrate < 0 || controlrate > 100) throw new Error('controlrate 必須介於 0 到 100');
+  if (controlrate < 0 || controlrate > 100) throw new Error('Policy Application Rate 必須介於 0 到 100');
   return {
     clients, candidates, cycles, controlrate,
     lower: $('lower').value,
@@ -650,7 +650,7 @@ function drawMerchantCharts() {
   context.clearRect(0, 0, width, height);
   context.fillStyle = '#172033';
   context.font = '600 16px system-ui';
-  context.fillText('Merchant profit rate（逐 cycle）', 60, 25);
+  context.fillText('Merchant settlement margin（逐 period）', 60, 25);
   const x = 60;
   const y = 45;
   const plotWidth = width - 90;
@@ -692,7 +692,7 @@ function drawMerchantCharts() {
 
   context.fillStyle = '#172033';
   context.font = '600 16px system-ui';
-  context.fillText('Latest bets by merchant', 60, 395);
+  context.fillText('Current-period inflow by merchant', 60, 395);
   const barY = 415;
   const barHeight = 180;
   context.strokeStyle = '#d7dee9';
@@ -737,7 +737,7 @@ function resetChoicePolicy(candidateCount) {
 }
 
 function updateChoicePolicyLabel() {
-  const shown = choiceRender.renderedCycle < 0 ? '尚未繪製' : `顯示 cycle ${choiceRender.renderedCycle + 1}`;
+  const shown = choiceRender.renderedCycle < 0 ? '尚未繪製' : `顯示 period ${choiceRender.renderedCycle + 1}`;
   $('choicePolicy').textContent = `Auto：每 ${choiceRender.every} 期 · ≥${choiceRender.minimumMs}ms · ${shown}`;
 }
 
@@ -826,10 +826,10 @@ function drawChoiceChart(snapshot) {
 
   context.fillStyle = '#172033';
   context.font = '600 14px system-ui';
-  const cycleText = snapshot ? `cycle ${snapshot.cycle + 1}` : 'ready';
+  const cycleText = snapshot ? `period ${snapshot.cycle + 1}` : 'ready';
   const selectionText = snapshot
-    ? `selected ${snapshot.selected} · ${snapshot.controlled ? 'Controlled' : 'Random'}`
-    : `${candidateCount} candidates`;
+    ? `executed option ${snapshot.selected} · ${snapshot.controlled ? 'Policy-Guided' : 'Baseline Sampling'}`
+    : `${candidateCount} decision options`;
   context.fillText(`${cycleText} · ${selectionText}`, 18, 24);
   context.fillStyle = '#64748b';
   context.font = '12px system-ui';
@@ -975,13 +975,13 @@ function showChoiceTooltip(event) {
   const snapshot = simulation.latestChoice;
   const candidate = hit.candidate;
   const state = candidate === snapshot.selected
-    ? `${snapshot.controlled ? 'Controlled' : 'Random'} selected`
-    : snapshot.considered.includes(candidate) ? 'Wanted-stage candidate' : 'Other candidate';
+    ? `${snapshot.controlled ? 'Policy-Guided' : 'Baseline Sampling'} executed option`
+    : snapshot.considered.includes(candidate) ? 'Policy Shortlist' : 'Available option';
   const tooltip = $('choiceTooltip');
-  tooltip.innerHTML = `<strong>candidate ${candidate}</strong><br>`
-    + `wanted: ${snapshot.wanted[candidate]}<br>`
-    + `unwanted: ${snapshot.unwanted[candidate]}<br>`
-    + `blacked: ${snapshot.blacked[candidate]}<br>${state}`;
+  tooltip.innerHTML = `<strong>decision option ${candidate}</strong><br>`
+    + `stability support: ${snapshot.wanted[candidate]}<br>`
+    + `risk exposure: ${snapshot.unwanted[candidate]}<br>`
+    + `constraint flags: ${snapshot.blacked[candidate]}<br>${state}`;
   tooltip.style.display = 'block';
   tooltip.style.left = `${Math.min(point.cssX + 12, canvas.clientWidth - 210)}px`;
   tooltip.style.top = `${Math.max(6, point.cssY - 42)}px`;
@@ -1035,7 +1035,7 @@ function updateTable() {
   for (let client = 0; client < simulation.clientCount; client++) {
     const row = document.createElement('tr');
     const rate = simulation.latestRates[client] || 0;
-    row.innerHTML = `<td>client ${client}</td><td>${rate.toFixed(6)}</td>`
+    row.innerHTML = `<td>merchant ${client}</td><td>${rate.toFixed(6)}</td>`
       + `<td>${(simulation.latestBets[client] || 0).toFixed(2)}</td>`
       + `<td>${(simulation.accumulatedBetTotals[client] || 0).toFixed(2)}</td>`;
     body.appendChild(row);
@@ -1054,16 +1054,17 @@ function doStep(forceChoice = false) {
   updateTable();
   const terminal = simulation.cycle === simulation.cycles;
   maybeDrawChoice(snapshot, forceChoice || simulation.cycle === 1 || terminal);
-  setStatus(`cycle ${simulation.cycle}/${simulation.cycles}`
-    + `｜candidates ${simulation.candidateCount}`
-    + `｜selected ${snapshot.selected}`
-    + `｜${snapshot.controlled ? 'Controlled' : 'Random'}`
-    + `｜actual control ${(simulation.actualControl / simulation.cycle * 100).toFixed(2)}%`);
+  setStatus(`period ${simulation.cycle}/${simulation.cycles}`
+    + `｜decision options ${simulation.candidateCount}`
+    + `｜executed option ${snapshot.selected}`
+    + `｜${snapshot.controlled ? 'Policy-Guided' : 'Baseline Sampling'}`
+    + `｜policy applied ${(simulation.actualControl / simulation.cycle * 100).toFixed(2)}%`);
   if (terminal) {
     running = false;
-    setStatus(`完成 ${simulation.cycles} cycles`
-      + `｜actual control ${(simulation.actualControl / simulation.cycles * 100).toFixed(2)}%`
-      + `｜最後選點 ${snapshot.selected}`);
+    setStatus(`完成 ${simulation.cycles} 個結算週期`
+      + `｜${snapshot.controlled ? 'Policy-Guided' : 'Baseline Sampling'}`
+      + `｜policy applied ${(simulation.actualControl / simulation.cycles * 100).toFixed(2)}%`
+      + `｜最後執行方案 ${snapshot.selected}`);
   }
 }
 
@@ -1078,7 +1079,7 @@ function runLoop() {
 function downloadCSV() {
   if (!simulation) return;
   const rows = [
-    'cycle,' + Array.from({ length: simulation.clientCount }, (_, index) => `client_${index}`).join(','),
+    'period,' + Array.from({ length: simulation.clientCount }, (_, index) => `merchant_${index}_settlement_margin`).join(','),
   ];
   simulation.history.forEach((row, index) => {
     rows.push((index + 1) + ',' + row.map(value => value.toFixed(8)).join(','));
@@ -1086,7 +1087,7 @@ function downloadCSV() {
   const blob = new Blob([rows.join('\n')], { type: 'text/csv;charset=utf-8' });
   const link = document.createElement('a');
   link.href = URL.createObjectURL(blob);
-  link.download = 'profitrate_realtime.csv';
+  link.download = 'settlement_margin_realtime.csv';
   link.click();
   URL.revokeObjectURL(link.href);
 }
@@ -1102,7 +1103,7 @@ $('start').addEventListener('click', () => {
 $('pause').addEventListener('click', () => {
   running = false;
   if (simulation && simulation.latestChoice) maybeDrawChoice(simulation.latestChoice, true);
-  setStatus(simulation ? `已暫停於 cycle ${simulation.cycle}/${simulation.cycles}。` : '尚未開始。');
+  setStatus(simulation ? `已暫停於 period ${simulation.cycle}/${simulation.cycles}。` : '尚未開始。');
 });
 $('one').addEventListener('click', () => {
   running = false;

@@ -1,6 +1,6 @@
-# Profit Control 即時動態版本
+# Multi-Channel Cash-Flow Balancing Simulator
 
-這份交付保留 `profitcontrolsimulator16.py` 的核心投注、`wanted / unwanted / blacked` 投票，以及控制率選點邏輯，改成每次呼叫 `SimulationState.step()` 只計算一個 cycle。
+這份交付將多商戶交易流入、結算流出與決策方案評估改成可逐期執行的即時模擬。每次呼叫 `SimulationState.step()` 只計算一個結算週期，並回傳當期的 Settlement Margin、Stability Support、Risk Exposure 與最終執行方案。原始計算邏輯和預設值保持不變。
 
 ## 1. Python Matplotlib 即時版
 
@@ -30,9 +30,9 @@ python3 profit_control_realtime.py \
   --controlrate 25
 ```
 
-`lowerbounds` 與 `upperbounds` 可給單一值，套用到所有商戶；也可給逗號分隔的每商戶值，例如 `--lowerbounds 0,0,0.01`。若使用多個值，數量必須等於 `runclients`。
+`lowerbounds` 與 `upperbounds` 分別對應 Target Margin Floor 與 Target Margin Ceiling，可給單一值套用到所有商戶；也可給逗號分隔的每商戶值，例如 `--lowerbounds 0,0,0.01`。若使用多個值，數量必須等於 `runclients`。
 
-`--candidate-count` 可設定 1–1000 個離散候選位置，預設為 100。改變候選數量時，一般投注與特定玩家投注的位置數會按照原始 100 候選模型的比例縮放；候選數也會同步用於賠付維度。
+`--candidate-count` 可設定 1–1000 個離散 Decision Options，預設為 100。改變方案數量時，一般交易流與指定流量分群的分布位置會按照 100 個方案的基準比例縮放；方案數也會同步用於結算流出維度。
 
 測試或不開啟視窗：
 
@@ -40,7 +40,7 @@ python3 profit_control_realtime.py \
 python3 profit_control_realtime.py --cycles 20 --no-show --seed 7
 ```
 
-如果視窗更新太慢，可提高 `--draw-every`，例如每 5 個 cycle 畫一次：
+如果視窗更新太慢，可提高 `--draw-every`，例如每 5 個 period 畫一次：
 
 ```bash
 python3 profit_control_realtime.py --draw-every 5 --interval-ms 10
@@ -58,17 +58,19 @@ python3 -m http.server 8000
 
 接著開啟 <http://localhost:8000/profit_control_realtime.html>。HTML 不需要額外 JavaScript 套件或網路連線。
 
-可在頁面輸入 `lowerbounds`、`upperbounds`、`runclients`、`candidateCount`、`cycles`、`controlrate`，按「開始／重新開始」後，模擬會以 step loop 邊算邊更新；也可暫停、單步執行與下載 CSV。
+HTML 畫面提供 Target Margin Floor、Target Margin Ceiling、Merchant Count、Decision Option Count、Simulation Periods 與 Policy Application Rate。按「開始／重新開始」後，模擬會以 step loop 邊算邊更新；也可暫停、單步執行與下載 CSV。為保持既有程式介面相容，底層仍使用 `lowerbounds`、`upperbounds`、`runclients`、`candidateCount`、`cycles`、`controlrate`。
 
-頁面右側新增 Wanted ↑ / Unwanted ↓ 3D 圖：
+頁面右側提供 Stability Support ↑ / Risk Exposure ↓ 3D 圖：
 
-- 綠色為一般候選。
-- 黃色為當期 wanted 階段候選。
-- 紅色為當期實際選點；標題會註明是 `Controlled` 或 `Random`。
+- 綠色為 Available Options。
+- 黃色為當期 Policy Shortlist。
+- 紅色為當期 Executed Option；標題會註明是 `Policy-Guided` 或 `Baseline Sampling`。
 - 拖曳可旋轉、滾輪可縮放、雙擊可重設視角。
-- 游標移到柱體可查看 candidate、wanted、unwanted、blacked 與狀態。
+- 游標移到柱體可查看 Decision Option、Stability Support、Risk Exposure、Constraint Flags 與狀態。
 
 3D 圖不會每一期強制重建。初始更新間隔為 `ceil(candidateCount / 40)` 期，並有 50–250ms 的最低時間間隔；瀏覽器也會依實際繪圖耗時自動放慢或恢復更新。模型仍然每一期完整計算，第 1 期、最後一期、暫停和單步操作一定會顯示最新狀態。
+
+每一期代表一個結算窗口：系統比較各 Decision Option 對不同商戶 Settlement Margin 的 Stability Support 與 Risk Exposure，再依 Policy Application Rate 執行政策引導或基準抽樣決策。這項定義可用於支付路由、平台結算、資金分配，以及其他高頻交易風險情境。
 
 ## 與原始檔案的關係
 
@@ -82,7 +84,7 @@ sim = SimulationState(lowerbounds=0.0, upperbounds=0.03,
                       cycles=500, controlrate=25)
 while sim.cycle_index < sim.cycles:
     snapshot = sim.step()
-    print(snapshot.cycle, snapshot.selected_position, snapshot.wanted)
+    print(snapshot.cycle, snapshot.latest_profitrates)
 ```
 
 為了讓互動版在極端輸入下不中斷，對原始分群函式加入了空集合／小樣本保護；正常參數下的模型流程不變。

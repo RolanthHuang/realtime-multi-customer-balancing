@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""Real-time version of ``profitcontrolsimulator16.py``.
+"""Real-time multi-channel cash-flow balancing simulator.
 
 The original model is kept in ``SimulationState.step``.  One call to
-``step()`` computes exactly one cycle and returns a small snapshot for a UI.
+``step()`` computes exactly one settlement period and returns a small snapshot for a UI.
 The command-line program uses that interface to update a Matplotlib window
 while the simulation is still running.
 
@@ -453,20 +453,20 @@ def create_live_plot(state: SimulationState):
     import matplotlib.pyplot as plt
 
     figure, (rate_axis, bet_axis) = plt.subplots(2, 1, figsize=(14, 9), sharex=True)
-    figure.canvas.manager.set_window_title("Profit control real-time simulation")
+    figure.canvas.manager.set_window_title("Multi-channel cash-flow balancing simulator")
     lines = []
     for client in range(state.runclients):
-        line, = rate_axis.plot([], [], linewidth=1.4, label=f"client {client}")
+        line, = rate_axis.plot([], [], linewidth=1.4, label=f"merchant {client}")
         lines.append(line)
-    rate_axis.axhline(float(np.mean(state.lowerbounds)), color="crimson", linestyle="--", label="lower bound")
-    rate_axis.axhline(float(np.mean(state.upperbounds)), color="darkorange", linestyle="--", label="upper bound")
-    rate_axis.set_ylabel("Profit rate")
+    rate_axis.axhline(float(np.mean(state.lowerbounds)), color="crimson", linestyle="--", label="target margin floor")
+    rate_axis.axhline(float(np.mean(state.upperbounds)), color="darkorange", linestyle="--", label="target margin ceiling")
+    rate_axis.set_ylabel("Settlement margin")
     rate_axis.set_ylim(-0.15, 0.35)
     rate_axis.grid(alpha=0.25)
     rate_axis.legend(loc="upper left", ncol=min(5, state.runclients + 2), fontsize=8)
     bars = bet_axis.bar(np.arange(state.runclients), np.zeros(state.runclients), color="cornflowerblue")
-    bet_axis.set_xlabel("Merchant / client")
-    bet_axis.set_ylabel("Current bets")
+    bet_axis.set_xlabel("Merchant")
+    bet_axis.set_ylabel("Current-period inflow")
     bet_axis.grid(axis="y", alpha=0.25)
     return figure, rate_axis, bet_axis, lines, bars
 
@@ -479,13 +479,13 @@ def update_live_plot(figure, rate_axis, bet_axis, lines, bars, state: Simulation
         line.set_data(np.arange(1, len(history) + 1), history)
     rate_axis.set_xlim(0, max(10, state.cycles))
     rate_axis.set_title(
-        f"Profit rate unfolding | cycle {snapshot.cycle + 1}/{state.cycles} | "
-        f"controlled {snapshot.actual_control_count} ({snapshot.actual_control_count / (snapshot.cycle + 1):.1%})"
+        f"Settlement margin trajectory | period {snapshot.cycle + 1}/{state.cycles} | "
+        f"policy-guided {snapshot.actual_control_count} ({snapshot.actual_control_count / (snapshot.cycle + 1):.1%})"
     )
     for bar, height in zip(bars, snapshot.latest_bets):
         bar.set_height(height)
     bet_axis.set_ylim(0, max(1.0, max(snapshot.latest_bets) * 1.15))
-    bet_axis.set_title(f"Latest bets | selected position = {snapshot.selected_position}")
+    bet_axis.set_title(f"Current-period inflow | executed option = {snapshot.selected_position}")
     figure.tight_layout()
     figure.canvas.draw_idle()
     figure.canvas.flush_events()
@@ -501,13 +501,13 @@ def parse_args() -> argparse.Namespace:
         "--candidate-count",
         type=int,
         default=DEFAULT_CANDIDATE_COUNT,
-        help="number of discrete candidate positions (1 to 1000)",
+        help="number of discrete decision options (1 to 1000)",
     )
     parser.add_argument("--cycles", type=int, default=500)
-    parser.add_argument("--controlrate", type=float, default=0.0, help="0 to 100 percent")
+    parser.add_argument("--controlrate", type=float, default=0.0, help="policy application rate, 0 to 100 percent")
     parser.add_argument("--seed", type=int, default=None, help="optional random seed")
-    parser.add_argument("--interval-ms", type=float, default=40.0, help="pause after each drawn cycle")
-    parser.add_argument("--draw-every", type=int, default=1, help="draw once every N cycles")
+    parser.add_argument("--interval-ms", type=float, default=40.0, help="pause after each drawn period")
+    parser.add_argument("--draw-every", type=int, default=1, help="draw once every N periods")
     parser.add_argument("--no-show", action="store_true", help="run without opening a Matplotlib window")
     parser.add_argument("--save-json", type=Path, help="save final simulation summary as JSON")
     return parser.parse_args()
@@ -541,7 +541,7 @@ def main() -> None:
             if args.interval_ms > 0:
                 time.sleep(args.interval_ms / 1000.0)
         if state.cycle_index == 1 or state.cycle_index == state.cycles or state.cycle_index % max(1, state.cycles // 10) == 0:
-            print(f"cycle {state.cycle_index}/{state.cycles}")
+            print(f"period {state.cycle_index}/{state.cycles}")
 
     if last_snapshot is None:
         return

@@ -886,15 +886,16 @@ function playElimination() {
   if (!grid || !status) return;
   const row = trace.layerTrace.find(item => item.score === Number(grid.dataset.score)) || trace.layerTrace[0];
   if (!row) return;
+  const meaningfulSteps = row.steps.filter(step => step.stopped || step.before.length !== step.after.length);
   const tiles = [...grid.querySelectorAll('.elimination-option')];
   tiles.forEach(tile => tile.className = 'elimination-option');
   status.textContent = `W=${row.score}：${row.starting.length} 個方案開始接受 U 分層排除`;
-  if (!row.steps.length) {
+  if (!meaningfulSteps.length) {
     tiles.forEach(tile => tile.classList.add('survivor'));
     status.textContent = `W=${row.score}：沒有需要移除的 U 層`;
     return;
   }
-  row.steps.forEach((step, index) => {
+  meaningfulSteps.forEach((step, index) => {
     motionTimers.push(setTimeout(() => {
       if (step.stopped) {
         status.textContent = `U=${step.uLevel} 若繼續會清空整層，因此停止並保留上一組候選`;
@@ -905,7 +906,7 @@ function playElimination() {
         });
         status.textContent = `排除 U=${step.uLevel}：剩下 ${step.after.length} 個方案`;
       }
-      if (index === row.steps.length - 1) {
+      if (index === meaningfulSteps.length - 1) {
         motionTimers.push(setTimeout(() => {
           const finalSet = new Set(row.survivors);
           tiles.forEach(tile => { if (finalSet.has(Number(tile.dataset.option))) tile.classList.add('survivor'); });

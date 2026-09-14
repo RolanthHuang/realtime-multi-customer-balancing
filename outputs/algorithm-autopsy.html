@@ -1,0 +1,728 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Decision System Autopsy</title>
+  <style>
+    :root {
+      color-scheme: light;
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      --bg: #f4f6f9;
+      --surface: #ffffff;
+      --ink: #142033;
+      --muted: #637083;
+      --line: #dde3eb;
+      --soft: #eef2f6;
+      --blue: #2359a8;
+      --green: #159a7e;
+      --green-soft: #e4f5f0;
+      --yellow: #b98a08;
+      --yellow-soft: #fff4ca;
+      --red: #c73852;
+      --red-soft: #fde9ed;
+      --black: #303845;
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; color: var(--ink); background: var(--bg); }
+    button, input { font: inherit; }
+    button { cursor: pointer; }
+    a { color: var(--blue); }
+    main { width: min(1440px, 100%); margin: 0 auto; padding: 24px; }
+    .topline { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+    h1 { margin: 0; font-size: clamp(25px, 4vw, 38px); font-weight: 600; letter-spacing: -.02em; }
+    h2 { margin: 0; font-size: 18px; font-weight: 600; }
+    h3 { margin: 0 0 8px; font-size: 14px; font-weight: 600; }
+    p { line-height: 1.6; }
+    .lede { max-width: 880px; margin: 8px 0 20px; color: var(--muted); }
+    .back { text-decoration: none; white-space: nowrap; }
+    .panel { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; }
+    .controls { padding: 16px; }
+    .control-grid { display: grid; grid-template-columns: repeat(6, minmax(120px, 1fr)); gap: 12px; }
+    label { display: grid; gap: 5px; color: var(--muted); font-size: 13px; }
+    input { width: 100%; min-height: 40px; padding: 8px 10px; border: 1px solid #c7d0dc; border-radius: 8px; color: var(--ink); background: var(--surface); }
+    input:focus { outline: 3px solid #96b9ed66; border-color: var(--blue); }
+    .actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 14px; }
+    .button { border: 1px solid var(--line); border-radius: 8px; min-height: 40px; padding: 8px 14px; color: var(--ink); background: var(--surface); }
+    .button.primary { border-color: var(--blue); color: #fff; background: var(--blue); }
+    .button:disabled { opacity: .45; cursor: not-allowed; }
+    .status { color: var(--muted); font-size: 13px; }
+    .error { color: var(--red); }
+    .pipeline { display: grid; grid-template-columns: repeat(9, minmax(100px, 1fr)); gap: 8px; margin: 16px 0; overflow-x: auto; padding-bottom: 4px; }
+    .stage-tab { position: relative; min-height: 68px; padding: 9px 10px; border: 1px solid var(--line); border-radius: 10px; color: var(--muted); background: var(--surface); text-align: left; }
+    .stage-tab strong { display: block; margin-bottom: 3px; color: var(--ink); font-weight: 600; }
+    .stage-tab[aria-selected="true"] { border-color: var(--blue); box-shadow: 0 0 0 2px #2359a81c; }
+    .stage-tab[aria-selected="true"] strong { color: var(--blue); }
+    .autopsy-grid { display: grid; grid-template-columns: minmax(260px, .7fr) minmax(0, 1.8fr); gap: 16px; align-items: start; }
+    .narrative { padding: 18px; }
+    .eyebrow { color: var(--blue); font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: .08em; }
+    .stage-title { margin: 5px 0 14px; font-size: 24px; font-weight: 600; }
+    .block { margin-top: 18px; }
+    .block p { margin: 0; color: #3c4859; }
+    .function-name { display: inline-block; margin: 0 0 8px; padding: 4px 7px; border-radius: 6px; color: #fff; background: var(--black); font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; }
+    pre { margin: 0; padding: 12px; overflow-x: auto; border-radius: 9px; color: #eaf0f8; background: #172033; font: 12px/1.55 ui-monospace, SFMono-Regular, Menlo, monospace; white-space: pre-wrap; }
+    .stage-actions { display: flex; gap: 8px; margin-top: 18px; }
+    .evidence { min-width: 0; padding: 18px; }
+    .flowbar { display: flex; align-items: stretch; gap: 6px; margin-bottom: 16px; }
+    .flow-step { flex: 1; min-width: 0; padding: 9px; border-radius: 9px; color: var(--muted); background: var(--soft); }
+    .flow-step strong { display: block; color: var(--ink); font-size: 18px; font-weight: 600; }
+    .flow-step.active { color: #fff; background: var(--blue); }
+    .flow-step.active strong { color: #fff; }
+    .visual-title { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-bottom: 10px; }
+    .visual-note { color: var(--muted); font-size: 12px; text-align: right; }
+    .candidate-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(112px, 1fr)); gap: 8px; }
+    .candidate { min-height: 118px; padding: 10px; border-radius: 10px; background: var(--green-soft); }
+    .candidate.shortlist { background: var(--yellow-soft); }
+    .candidate.executed { color: #7e1730; background: var(--red-soft); box-shadow: inset 0 0 0 2px var(--red); }
+    .candidate.dim { opacity: .42; }
+    .candidate-head { display: flex; justify-content: space-between; gap: 8px; font-weight: 600; }
+    .candidate-state { color: var(--muted); font-size: 11px; font-weight: 400; }
+    .vector { margin-top: 9px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 13px; }
+    .mini-bars { display: grid; gap: 4px; margin-top: 9px; }
+    .mini-row { display: grid; grid-template-columns: 13px 1fr 30px; gap: 5px; align-items: center; font-size: 11px; }
+    .track { height: 6px; overflow: hidden; border-radius: 4px; background: #ffffffaa; }
+    .fill { height: 100%; background: var(--green); }
+    .fill.u { background: var(--red); }
+    .fill.b { background: var(--black); }
+    .table-wrap { overflow-x: auto; }
+    table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    th, td { padding: 8px 9px; border-bottom: 1px solid var(--line); text-align: right; white-space: nowrap; }
+    th { color: var(--muted); font-weight: 500; background: #f8fafc; }
+    th:first-child, td:first-child { text-align: left; }
+    .explain { margin-top: 14px; padding: 12px; border-left: 4px solid var(--blue); color: #3e4a5d; background: #edf4ff; line-height: 1.6; }
+    .legend { display: flex; flex-wrap: wrap; gap: 14px; margin-top: 12px; color: var(--muted); font-size: 12px; }
+    .dot { display: inline-block; width: 10px; height: 10px; margin-right: 5px; border-radius: 2px; vertical-align: -1px; }
+    .dot.green { background: var(--green); } .dot.yellow { background: var(--yellow); } .dot.red { background: var(--red); } .dot.black { background: var(--black); }
+    .footer-note { margin: 18px 0 0; color: var(--muted); font-size: 13px; }
+    @media (max-width: 1050px) {
+      .control-grid { grid-template-columns: repeat(3, 1fr); }
+      .autopsy-grid { grid-template-columns: 1fr; }
+      .pipeline { grid-template-columns: repeat(9, 132px); }
+    }
+    @media (max-width: 620px) {
+      main { padding: 14px; }
+      .topline { align-items: flex-start; flex-direction: column; }
+      .control-grid { grid-template-columns: 1fr 1fr; }
+      .flowbar { display: grid; grid-template-columns: repeat(2, 1fr); }
+      .visual-title { align-items: flex-start; flex-direction: column; }
+      .visual-note { text-align: left; }
+    }
+  </style>
+</head>
+<body>
+<main>
+  <div class="topline">
+    <h1>Decision System Autopsy</h1>
+    <a class="back" href="profit_control_realtime.html">← 回到即時 Demo</a>
+  </div>
+  <p class="lede">把一個多商戶、單一共用結果的線上決策週期逐層拆開。每一關都使用同一組數字，顯示當下問題、對應的原始函數、資料如何改變，以及哪些方案能進入下一關。</p>
+
+  <section class="panel controls" aria-label="Autopsy inputs">
+    <div class="control-grid">
+      <label>Target Margin Floor<input id="lower" value="0.0"></label>
+      <label>Target Margin Ceiling<input id="upper" value="0.03"></label>
+      <label>Merchant Count<input id="clients" type="number" min="2" max="12" value="6"></label>
+      <label>Decision Option Count<input id="candidates" type="number" min="4" max="24" value="12"></label>
+      <label>Trace Period<input id="period" type="number" min="2" max="80" value="8"></label>
+      <label>Policy Application Rate<input id="control" type="number" min="0" max="100" step="1" value="100"></label>
+      <label>Seed<input id="seed" type="number" value="16"></label>
+    </div>
+    <div class="actions">
+      <button class="button primary" id="run" type="button">以這組數字重新解剖</button>
+      <button class="button" id="example" type="button">恢復預設案例</button>
+      <span id="status" class="status" aria-live="polite"></span>
+    </div>
+  </section>
+
+  <nav id="pipeline" class="pipeline" aria-label="Autopsy stages"></nav>
+
+  <div class="autopsy-grid">
+    <aside class="panel narrative">
+      <div id="eyebrow" class="eyebrow"></div>
+      <div id="stageTitle" class="stage-title"></div>
+      <section class="block"><h3>線上系統碰到的問題</h3><p id="problem"></p></section>
+      <section class="block"><h3>套用的原始設計</h3><div id="functionName" class="function-name"></div><p id="solution"></p></section>
+      <section class="block"><h3>這一關完成了什麼</h3><p id="outcome"></p></section>
+      <section class="block"><h3>核心片段</h3><pre><code id="code"></code></pre></section>
+      <div class="stage-actions">
+        <button class="button" id="prev" type="button">上一關</button>
+        <button class="button primary" id="next" type="button">下一關</button>
+      </div>
+    </aside>
+
+    <section class="panel evidence" aria-live="polite">
+      <div id="flowbar" class="flowbar"></div>
+      <div class="visual-title"><h2 id="visualTitle"></h2><div id="visualNote" class="visual-note"></div></div>
+      <div id="visual"></div>
+      <div id="explain" class="explain"></div>
+      <div class="legend">
+        <span><i class="dot green"></i>仍可用</span>
+        <span><i class="dot yellow"></i>Policy Shortlist</span>
+        <span><i class="dot red"></i>Executed Option</span>
+        <span><i class="dot black"></i>High-Risk Entity Intervention（原始變數 blacked）</span>
+      </div>
+    </section>
+  </div>
+  <p class="footer-note">這是可稽核的合成案例：每次以相同 Seed 與參數重跑會得到相同結果。它保留原始選擇規則，但不包含真實商戶、玩家或交易資料。</p>
+</main>
+
+<script>
+'use strict';
+
+const INTERVAL = 30;
+const ENHANCED = 2;
+const UL = -0.05;
+const HUL = -8;
+const $ = id => document.getElementById(id);
+const sum = values => values.reduce((total, value) => total + value, 0);
+const mean = values => values.length ? sum(values) / values.length : 0;
+const fmt = value => Number.isFinite(value) ? value.toFixed(4) : '—';
+const escapeHtml = value => String(value).replace(/[&<>"']/g, char => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[char]));
+
+function mulberry32(seed) {
+  return function random() {
+    let value = seed += 0x6D2B79F5;
+    value = Math.imul(value ^ value >>> 15, value | 1);
+    value ^= value + Math.imul(value ^ value >>> 7, value | 61);
+    return ((value ^ value >>> 14) >>> 0) / 4294967296;
+  };
+}
+function randomInt(rng, low, highExclusive) { return Math.floor(rng() * (highExclusive - low)) + low; }
+function pick(rng, values) { return values[Math.floor(rng() * values.length)]; }
+function shuffle(rng, values) {
+  for (let i = values.length - 1; i > 0; i--) {
+    const j = Math.floor(rng() * (i + 1));
+    [values[i], values[j]] = [values[j], values[i]];
+  }
+  return values;
+}
+function sample(rng, values, count, replacement = false) {
+  if (replacement) return Array.from({length: count}, () => pick(rng, values));
+  return shuffle(rng, values.slice()).slice(0, count);
+}
+function parseBound(text, count) {
+  const values = String(text).replaceAll(';', ',').split(',').map(v => Number(v.trim())).filter(Number.isFinite);
+  if (!values.length) throw new Error('上下界至少需要一個數字');
+  if (values.length === 1) return Array(count).fill(values[0]);
+  if (values.length !== count) throw new Error(`上下界必須是單值或 ${count} 個數字`);
+  return values;
+}
+function aroundPole(cycle, poles) {
+  return poles.some(pole => cycle < pole + INTERVAL / 2 && cycle > pole - INTERVAL / 2);
+}
+function averageSquared(values, center) {
+  return values.length ? sum(values.map(value => (value - center) ** 2)) / values.length : 0;
+}
+function targetFunction(values) {
+  if (values.length > 50) values = values.slice(-50);
+  if (values.length < 3) return mean(values);
+  const ordered = values.slice().sort((a, b) => a - b);
+  const maximum = ordered.at(-1);
+  const minimum = ordered[0];
+  const middle = ordered.slice();
+  middle.splice(middle.indexOf(maximum), 1);
+  middle.splice(middle.indexOf(minimum), 1);
+  const objectives = {};
+  const average = mean(values);
+  for (let i = 0; i < middle.length - 2; i++) {
+    for (let j = 1; j < middle.length - i - 1; j++) {
+      objectives[`${i},${j}`] = averageSquared(middle.slice(0, i + 1), minimum)
+        + averageSquared(middle.slice(i + 1, i + j + 1), average)
+        + averageSquared(middle.slice(i + j + 1), maximum);
+    }
+  }
+  const keys = Object.keys(objectives);
+  if (!keys.length) return mean(values);
+  const best = keys.reduce((left, right) => objectives[left] <= objectives[right] ? left : right);
+  const [i, j] = best.split(',').map(Number);
+  const groups = [middle.slice(0, i + 1).concat([minimum]), middle.slice(i + 1, i + j + 1), middle.slice(i + j + 1).concat([maximum])];
+  return mean(groups.reduce((left, right) => right.length > left.length ? right : left, []));
+}
+function targetBeta(values) {
+  if (values.length < 3) return mean(values);
+  const ordered = values.slice().sort((a, b) => a - b);
+  const maximum = ordered.at(-1);
+  const minimum = ordered[0];
+  const middle = ordered.slice();
+  middle.splice(middle.indexOf(maximum), 1);
+  middle.splice(middle.indexOf(minimum), 1);
+  const objective = [];
+  for (let i = 0; i < middle.length - 1; i++) {
+    objective[i] = averageSquared(middle.slice(0, i + 1), minimum)
+      + averageSquared(middle.slice(i + 1), maximum);
+  }
+  if (!objective.length) return mean(values);
+  let best = 0;
+  for (let i = 1; i < objective.length; i++) if (objective[i] < objective[best]) best = i;
+  return mean(middle.slice(best + 1)) || mean(values);
+}
+
+class SimulationState {
+  constructor(config) {
+    this.clientCount = config.clients;
+    this.candidateCount = config.candidates;
+    this.cycles = Math.max(60, config.period + 20);
+    this.controlrate = config.controlrate;
+    this.lower = parseBound(config.lower, this.clientCount);
+    this.upper = parseBound(config.upper, this.clientCount);
+    this.rng = mulberry32(config.seed >>> 0);
+    this.cycle = 0;
+    this.source = Array.from({length: this.candidateCount}, (_, index) => index);
+    this.chance = [0,0,0,0,0,0,0,0,0,1];
+    const blank = () => Array.from({length: this.clientCount}, () => []);
+    const zeros = () => Array(this.clientCount).fill(0);
+    this.collectiveBets = blank(); this.collectiveBonus = blank();
+    this.collectiveCPBets = blank(); this.collectiveCPBonus = blank();
+    this.spikes = blank(); this.deviation = zeros();
+    this.accumulatedBets = zeros(); this.accumulatedBonus = zeros();
+    this.profitrate = blank(); this.controlledPlayerBets = zeros(); this.controlledPlayerBonus = zeros();
+    this.drift = []; this.driftPull = 1;
+    this.cpd = Array.from({length: this.clientCount}, () => randomInt(this.rng, 0, this.cycles));
+    const poleCount = Math.floor(this.cycles / INTERVAL * .7);
+    const cycleSource = Array.from({length: this.cycles}, (_, index) => index);
+    this.poles = Array.from({length: this.clientCount}, () => sample(this.rng, cycleSource, poleCount).sort((a,b) => a-b));
+  }
+  rankings() {
+    return Array.from({length: this.clientCount}, (_, index) => index)
+      .sort((a,b) => this.accumulatedBets[b] - this.accumulatedBets[a])
+      .slice(0, Math.floor(this.clientCount / 10));
+  }
+  makeBets(cycle, client) {
+    const normalLow = Math.max(1, Math.ceil(this.candidateCount * .43));
+    const normalHigh = Math.max(normalLow, Math.floor(this.candidateCount * .62));
+    const betNumbers = sample(this.rng, this.source, randomInt(this.rng, normalLow, normalHigh + 1));
+    const locating = Array(this.candidateCount).fill(0);
+    const level = shuffle(this.rng, [0,1]);
+    const sales = level[0] + 2 * level[1];
+    for (const candidate of betNumbers) {
+      const wave = Math.round(Math.abs(2 + Math.sin((cycle - candidate - this.cpd[client]) * 2 * Math.PI / this.cycles)) * 100) / 100;
+      locating[candidate] += (aroundPole(cycle, this.poles[client])
+        ? (pick(this.rng, this.chance) === 0 ? randomInt(this.rng, 4, 100) : randomInt(this.rng, 4, 10) * 100)
+        : randomInt(this.rng, 4, 10) * 5) * sales * wave;
+    }
+    const specific = Array(this.candidateCount).fill(0);
+    const low = Math.max(1, Math.ceil(this.candidateCount * .10));
+    const high = Math.max(low, Math.floor(this.candidateCount * .99));
+    for (const candidate of sample(this.rng, this.source, randomInt(this.rng, low, high + 1), true)) {
+      specific[candidate] += randomInt(this.rng, 4, 10) * sales;
+    }
+    for (let i = 0; i < this.candidateCount; i++) locating[i] += specific[i];
+    return {locating, specific};
+  }
+  step(capture = false) {
+    const cycle = this.cycle;
+    const wanted = Array(this.candidateCount).fill(0);
+    const unwanted = Array(this.candidateCount).fill(0);
+    const blacked = Array(this.candidateCount).fill(0);
+    const bets = Array(this.clientCount).fill(0);
+    const bonus = Array.from({length: this.clientCount}, () => Array(this.candidateCount).fill(0));
+    const cpBonus = Array.from({length: this.clientCount}, () => Array(this.candidateCount).fill(0));
+    const voting = Array(this.clientCount).fill(1);
+    for (let i = 7; i < Math.min(9, this.clientCount); i++) voting[i] = 3;
+    let jumpActivated = false;
+    const merchantTrace = [];
+
+    for (let client = 0; client < this.clientCount; client++) {
+      const generated = this.makeBets(cycle, client);
+      const total = sum(generated.locating);
+      const historyBefore = this.collectiveBets[client].slice();
+      const threshold = historyBefore.length ? targetFunction(historyBefore) : 0;
+      if (!total) continue;
+      const ranks = this.rankings();
+      if (this.accumulatedBets[client] !== 0) {
+        if (ranks.includes(client) && this.profitrate[client].length && this.profitrate[client].at(-1) < this.lower[client]) {
+          voting[client] = Math.floor(Math.log(this.accumulatedBets[client])) + 1;
+        }
+      } else voting[client] = 0;
+      const spike = historyBefore.length > 5 && total > 2 * threshold;
+      if (spike) {
+        jumpActivated = true; this.spikes[client].push(cycle);
+        voting[client] = Math.floor(cycle / this.spikes[client].length) + 1;
+      }
+      if (this.profitrate[client].length && this.profitrate[client].at(-1) < 0) this.deviation[client]++;
+      else this.deviation[client] = 0;
+      if (this.drift.length && this.drift.at(-1)[0] > 0) this.driftPull = 1;
+      else if (this.drift.length && this.drift.at(-1)[0] < 0) this.driftPull = 0;
+      if (this.driftPull && this.profitrate[client].length && this.profitrate[client].at(-1) < UL && this.deviation[client]) {
+        const multiplier = Math.floor(Math.log(this.deviation[client])) + 1;
+        if (multiplier > voting[client]) voting[client] *= multiplier;
+      }
+      const specificSum = sum(generated.specific);
+      const specificBonus = generated.specific.map(value => this.candidateCount * value * .98);
+      if (specificSum) {
+        const specificProfit = specificBonus.map(value => (this.controlledPlayerBonus[client] + value) / (this.controlledPlayerBets[client] + specificSum));
+        for (let candidate = 0; candidate < this.candidateCount; candidate++) {
+          if (specificProfit[candidate] < 1) blacked[candidate] += voting[client] * ENHANCED;
+        }
+      }
+      this.controlledPlayerBets[client] += specificSum;
+      this.collectiveCPBets[client].push(specificSum);
+      cpBonus[client] = specificBonus;
+      bets[client] = total;
+      bonus[client] = generated.locating.map(value => this.candidateCount * value * .98);
+      const currentRate = bonus[client].map(value => 1 - value / total);
+      let rate = this.profitrate[client].length ? this.profitrate[client].at(-1) : 0;
+      let accumulatedRate = currentRate.slice();
+      if (cycle > 0) {
+        this.accumulatedBets[client] += this.collectiveBets[client].at(-1);
+        this.accumulatedBonus[client] += this.collectiveBonus[client].at(-1);
+        rate = this.accumulatedBets[client] ? 1 - this.accumulatedBonus[client] / this.accumulatedBets[client] : 0;
+        this.profitrate[client].push(rate);
+        this.controlledPlayerBets[client] += this.collectiveCPBets[client].at(-1);
+        this.controlledPlayerBonus[client] += this.collectiveCPBonus[client].at(-1);
+        accumulatedRate = currentRate.map((_, candidate) => 1 - (this.accumulatedBonus[client] + bonus[client][candidate]) / (this.accumulatedBets[client] + bets[client]));
+        for (let candidate = 0; candidate < this.candidateCount; candidate++) {
+          if (rate < this.lower[client]) {
+            if (rate > UL) {
+              if (currentRate[candidate] > this.lower[client]) wanted[candidate]++;
+              else if (currentRate[candidate] <= HUL || accumulatedRate[candidate] <= rate) unwanted[candidate] += voting[client] * (Math.abs(Math.trunc(currentRate[candidate])) + 1);
+            } else if (currentRate[candidate] > this.lower[client]) wanted[candidate] += voting[client];
+            else if (currentRate[candidate] <= HUL || accumulatedRate[candidate] <= rate) unwanted[candidate] += voting[client] * (Math.abs(Math.trunc(currentRate[candidate])) + 1);
+          } else if (rate > this.upper[client]) {
+            if (accumulatedRate[candidate] >= this.lower[client] && currentRate[candidate] < rate) wanted[candidate]++;
+            else if (currentRate[candidate] <= HUL || currentRate[candidate] <= this.lower[client]) unwanted[candidate] += voting[client] * (Math.abs(Math.trunc(currentRate[candidate])) + 1);
+          } else {
+            if (currentRate[candidate] <= UL) unwanted[candidate]++;
+            if (currentRate[candidate] <= HUL) unwanted[candidate] += voting[client] * (Math.abs(Math.trunc(currentRate[candidate])) + 1);
+          }
+        }
+      }
+      merchantTrace.push({client, total, threshold, spike, vote: voting[client], rate, lower: this.lower[client], upper: this.upper[client], specificSum});
+    }
+
+    const maximumWanted = Math.max(...wanted);
+    const maximumUnwanted = Math.max(...unwanted);
+    const maximumBlacked = Math.max(...blacked);
+    const betaInput = wanted.slice().sort((a,b) => b-a);
+    const initialRaw = targetBeta(betaInput);
+    const initial = Math.trunc(initialRaw);
+    const penLayers = {};
+    const layerTrace = [];
+    for (let score = initial; score <= maximumWanted; score++) {
+      let wantedResult = this.source.filter(candidate => wanted[candidate] === score);
+      if (!wantedResult.length) continue;
+      const starting = wantedResult.slice();
+      penLayers[score] = 0;
+      for (let layer = 0; layer < maximumUnwanted; layer++) {
+        const copy = wantedResult.slice();
+        const unwantedResult = this.source.filter(candidate => unwanted[candidate] === maximumUnwanted - layer);
+        for (const candidate of wantedResult) {
+          if (unwantedResult.includes(candidate)) {
+            copy.splice(copy.indexOf(candidate), 1);
+            if (!copy.length) break;
+          }
+        }
+        if (!copy.length) break;
+        penLayers[score] = layer;
+        wantedResult = copy;
+      }
+      layerTrace.push({score, starting, survivors: wantedResult.slice(), depth: penLayers[score]});
+    }
+    const penKeys = Object.keys(penLayers);
+    const layerDistances = {};
+    let chosenWantedLayer = maximumWanted;
+    let considered = [];
+    let finalists = [];
+    const deepScores = {};
+    if (penKeys.length) {
+      let best = penKeys[0];
+      const distance = key => (maximumWanted - Number(key)) ** 2 + (maximumUnwanted - penLayers[key]) ** 2;
+      for (const key of penKeys) {
+        layerDistances[key] = distance(key);
+        if (distance(key) < distance(best)) best = key;
+      }
+      chosenWantedLayer = Number(best);
+      considered = this.source.filter(candidate => wanted[candidate] === chosenWantedLayer);
+      for (const candidate of considered) deepScores[candidate] = (maximumUnwanted - unwanted[candidate]) ** 2 + blacked[candidate] ** 2;
+      const maximumDeep = Math.max(...Object.values(deepScores));
+      finalists = considered.filter(candidate => deepScores[candidate] === maximumDeep);
+    } else {
+      considered = this.source.filter(candidate => wanted[candidate] === maximumWanted);
+      finalists = considered.slice();
+    }
+    if (!finalists.length) { considered = this.source.slice(); finalists = this.source.slice(); }
+    const policyDraw = this.rng() * 100;
+    let jumpDraw = null;
+    let controlled = policyDraw < this.controlrate;
+    if (!controlled && jumpActivated) {
+      jumpDraw = this.rng();
+      controlled = jumpDraw < .3;
+    }
+    const selected = controlled ? pick(this.rng, finalists) : pick(this.rng, this.source);
+    const feedback = [];
+    for (let client = 0; client < this.clientCount; client++) {
+      this.collectiveBonus[client].push(bonus[client][selected]);
+      this.collectiveBets[client].push(bets[client]);
+      this.controlledPlayerBonus[client] += cpBonus[client][selected];
+      this.collectiveCPBonus[client].push(cpBonus[client][selected]);
+      feedback.push({client, inflow: bets[client], settlementOutflow: bonus[client][selected], marginEffect: bets[client] ? 1 - bonus[client][selected] / bets[client] : 0});
+    }
+    this.cycle++;
+    return {cycle, wanted, unwanted, blacked, maximumWanted, maximumUnwanted, maximumBlacked,
+      merchantTrace, betaInput, initialRaw, initial, penLayers, layerTrace, layerDistances,
+      chosenWantedLayer, considered, deepScores, finalists, jumpActivated, policyDraw, jumpDraw,
+      controlled, selected, feedback, capture};
+  }
+}
+
+const stageDefinitions = [
+  {
+    title: '輸入與共用結果', fn: 'SimulationState.step()',
+    problem: '多個商戶同時有不同的現金流狀態，但這一期只能執行一個共同結果。直接逐商戶最佳化會產生彼此衝突的答案。',
+    solution: '先把所有商戶放進同一個 period，再讓每一個候選方案接受相同一輪評估。',
+    outcome: '建立同一個有限候選空間；後續每一關只刪減或重排這批方案，不會偷偷換題目。',
+    code: 'source = range(candidateCount)\nfor merchant in merchants:\n    evaluate every candidate under the same period'
+  },
+  {
+    title: '流量異常與權重', fn: 'aroundpoles() + targetfunction()',
+    problem: '線上流量會突然放大；若每個商戶永遠一票，異常時段與長期大流量商戶的訊號會被低估。',
+    solution: 'targetfunction 由近期歷史找出代表性流量中心；當期流量超過兩倍中心時標記 spike，再調整 voting。',
+    outcome: '把原始資金流轉成可比較的商戶權重，但仍保留每個商戶自己的上下界。',
+    code: 'threshold = targetfunction(collectivebets[j])\nif latest_flow > 2 * threshold:\n    voting[j] = cycle // spike_count + 1'
+  },
+  {
+    title: '離散向量展開', fn: 'wanted / unwanted / blacked',
+    problem: '單一總分容易讓一個方向的極端值補償另一個方向的失敗，也看不出系統是在支持、排斥，還是處理高風險對象。',
+    solution: '每個候選方案展開成三個離散維度：Stability Support（W）、Risk Exposure（U）、High-Risk Entity Intervention（B）。',
+    outcome: '得到每個方案的 (W, U, B) 座標；理想方向是 W 高、U 低，而 B 只在既有機制完成初選後使用。',
+    code: 'candidate[i] = (wanted[i], unwanted[i], blacked[i])\nideal direction: W ↑, U ↓\nB enters only after layered shortlist'
+  },
+  {
+    title: '找到 W 起始層', fn: 'targetfunctionbeta()',
+    problem: '如果從所有 W 分數逐一處理，低支持方案會製造大量噪音；如果只看最高 W，又可能過早丟掉可行層。',
+    solution: 'targetfunctionbeta 對排序後的 W 分布做二群切分，回傳高支持群的平均值，再取整數作為起始層。',
+    outcome: '低於門檻的 W 層不再進入昂貴的逐層排除；高支持區仍保留多個層級。',
+    code: 'initial = int(targetfunctionbeta(sorted(wanted, reverse=True)))\nfor W in range(initial, max(W) + 1): ...'
+  },
+  {
+    title: '逐層排除 U', fn: 'penLayers',
+    problem: '同一個 W 層裡仍可能存在高 Risk Exposure；直接相加會讓高 W 抵銷高 U。',
+    solution: '從最大 U 開始逐層刪除。只有在該 W 層仍至少留下一個候選時才繼續，記錄它能承受的排除深度。',
+    outcome: '形成非補償式 shortlist：已被高 U 淘汰的方案，不能靠其他維度重新進場。',
+    code: 'for U_layer from max to low:\n    remove candidates at this U\n    stop before the W layer becomes empty\npenLayers[W] = survived_depth'
+  },
+  {
+    title: '選擇候選層', fn: 'squared-distance layer choice',
+    problem: '多個 W 層都可能通過排除；需要同時考慮距離最高支持與低暴露區有多遠。',
+    solution: '對每個 penLayer 計算平方距離，選擇最小者。這一步選的是一整層，不是直接把所有候選分數相加。',
+    outcome: '確定唯一 W layer，只有原本就在這一層的方案能進入最後判斷。',
+    code: 'distance = (maxW - W_layer)²\n         + (maxU - penLayers[W_layer])²\nchosen_layer = argmin(distance)'
+  },
+  {
+    title: '層內非線性決選', fn: 'deepwanted',
+    problem: '同一個 W layer 內仍可能有多個方案；此時才需要分辨較低 U，以及能否對高風險對象產生更強介入。',
+    solution: '在已選層內最大化 (maxU − U)² + B²。平方項放大差異，但 B 不會讓前面已淘汰的候選復活。',
+    outcome: '得到 finalists。這是第三維 blacked 的位置：後置、非線性、受前兩維 shortlist 約束。',
+    code: 'deepwanted[i] = (maxU - unwanted[i])² + blacked[i]²\nfinalists = argmax(deepwanted)  # only inside chosen W layer'
+  },
+  {
+    title: '政策或基準抽樣', fn: 'controlrate branch',
+    problem: '線上系統不一定每一期都要套用政策；還需要保留基準抽樣，才能觀察控制介入與自然結果的差異。',
+    solution: 'Policy Application Rate 決定從 finalists 抽樣或從全部候選抽樣；流量 spike 另有 30% 的臨時介入機會。',
+    outcome: '產生本期唯一 Executed Option，並清楚標記是 Policy-Guided 或 Baseline Sampling。',
+    code: 'controlled = random()*100 < controlrate or spike_override\nselected = choice(finalists if controlled else source)'
+  },
+  {
+    title: '共同結果回饋', fn: 'collectiveBonus feedback loop',
+    problem: '選出結果後，若各商戶使用不同結果，前面的共同候選評估就失去意義。',
+    solution: '同一個 selected index 套用到所有商戶，更新各自的流入、結算流出與歷史 margin。',
+    outcome: '本期結束，新的歷史狀態成為下一期輸入；決策因此是可逐期運作的閉環，而非一次性排序。',
+    code: 'for merchant in merchants:\n    collectiveBonus[merchant].append(bonus[merchant][selected])\n    collectiveBets[merchant].append(flow[merchant])'
+  }
+];
+
+let trace = null;
+let stageIndex = 0;
+
+function readConfig() {
+  const clients = Math.trunc(Number($('clients').value));
+  const candidates = Math.trunc(Number($('candidates').value));
+  const period = Math.trunc(Number($('period').value));
+  const controlrate = Number($('control').value);
+  const seed = Math.trunc(Number($('seed').value));
+  if (clients < 2 || clients > 12) throw new Error('Merchant Count 必須介於 2 到 12');
+  if (candidates < 4 || candidates > 24) throw new Error('Autopsy 的 Decision Option Count 必須介於 4 到 24');
+  if (period < 2 || period > 80) throw new Error('Trace Period 必須介於 2 到 80');
+  if (controlrate < 0 || controlrate > 100) throw new Error('Policy Application Rate 必須介於 0 到 100');
+  return {clients, candidates, period, controlrate, seed, lower: $('lower').value, upper: $('upper').value};
+}
+
+function runAutopsy() {
+  try {
+    const config = readConfig();
+    const sim = new SimulationState(config);
+    for (let i = 0; i <= config.period - 1; i++) trace = sim.step(i === config.period - 1);
+    $('status').className = 'status';
+    $('status').textContent = `已重建 period ${config.period}：${config.candidates} 個方案 → ${trace.finalists.length} 個 finalist → 執行方案 ${trace.selected}`;
+    stageIndex = 0;
+    render();
+  } catch (error) {
+    $('status').className = 'status error';
+    $('status').textContent = `參數錯誤：${error.message}`;
+  }
+}
+
+function pipelineCounts() {
+  const candidateCount = trace.wanted.length;
+  const betaKept = trace.wanted.filter(value => value >= trace.initial).length;
+  const layerSurvivors = new Set(trace.layerTrace.flatMap(row => row.survivors)).size;
+  return [candidateCount, candidateCount, candidateCount, betaKept, layerSurvivors, trace.considered.length, trace.finalists.length, 1, 1];
+}
+
+function renderPipeline() {
+  const counts = pipelineCounts();
+  $('pipeline').innerHTML = stageDefinitions.map((stage, index) => `
+    <button class="stage-tab" type="button" data-stage="${index}" aria-selected="${index === stageIndex}">
+      <strong>${index + 1}. ${escapeHtml(stage.title)}</strong>${counts[index]} ${index > 6 ? 'result' : 'options'}
+    </button>`).join('');
+  document.querySelectorAll('.stage-tab').forEach(button => button.addEventListener('click', () => {
+    stageIndex = Number(button.dataset.stage); render();
+  }));
+}
+
+function renderFlowbar() {
+  const counts = pipelineCounts();
+  const points = [
+    ['All options', counts[0]], ['After W threshold', counts[3]],
+    ['Chosen layer', counts[5]], ['Finalists', counts[6]]
+  ];
+  const activeMap = [0,0,0,1,1,2,3,3,3];
+  $('flowbar').innerHTML = points.map((point, index) => `
+    <div class="flow-step ${index === activeMap[stageIndex] ? 'active' : ''}"><strong>${point[1]}</strong>${point[0]}</div>`).join('');
+}
+
+function candidateClass(index) {
+  const classes = ['candidate'];
+  if (trace.finalists.includes(index) || trace.considered.includes(index)) classes.push('shortlist');
+  if (index === trace.selected) classes.push('executed');
+  const betaPass = trace.wanted[index] >= trace.initial;
+  if ((stageIndex >= 3 && !betaPass) || (stageIndex >= 5 && !trace.considered.includes(index)) || (stageIndex >= 6 && !trace.finalists.includes(index))) classes.push('dim');
+  return classes.join(' ');
+}
+
+function candidateState(index) {
+  if (index === trace.selected) return 'EXECUTED';
+  if (trace.finalists.includes(index)) return 'FINALIST';
+  if (trace.considered.includes(index)) return 'CHOSEN LAYER';
+  if (trace.wanted[index] >= trace.initial) return 'W PASS';
+  return 'AVAILABLE';
+}
+
+function renderCandidates() {
+  const max = Math.max(1, trace.maximumWanted, trace.maximumUnwanted, trace.maximumBlacked);
+  return `<div class="candidate-grid">${trace.wanted.map((w, index) => `
+    <div class="${candidateClass(index)}">
+      <div class="candidate-head"><span>Option ${index}</span><span class="candidate-state">${candidateState(index)}</span></div>
+      <div class="vector">(${w}, ${trace.unwanted[index]}, ${trace.blacked[index]})</div>
+      <div class="mini-bars">
+        ${[['W',w,''],['U',trace.unwanted[index],'u'],['B',trace.blacked[index],'b']].map(([label,value,klass]) => `
+          <div class="mini-row"><span>${label}</span><div class="track"><div class="fill ${klass}" style="width:${value/max*100}%"></div></div><span>${value}</span></div>`).join('')}
+      </div>
+    </div>`).join('')}</div>`;
+}
+
+function merchantTable() {
+  return `<div class="table-wrap"><table><thead><tr><th>Merchant</th><th>Current inflow</th><th>targetfunction</th><th>2× threshold</th><th>Spike</th><th>Voting</th><th>Margin before choice</th><th>Band</th></tr></thead><tbody>
+    ${trace.merchantTrace.map(row => `<tr><td>Merchant ${row.client}</td><td>${row.total.toFixed(2)}</td><td>${row.threshold.toFixed(2)}</td><td>${(2*row.threshold).toFixed(2)}</td><td>${row.spike ? 'YES' : '—'}</td><td>${row.vote}</td><td>${fmt(row.rate)}</td><td>${fmt(row.lower)}–${fmt(row.upper)}</td></tr>`).join('')}
+  </tbody></table></div>`;
+}
+
+function betaTable() {
+  const rows = [...new Set(trace.wanted)].sort((a,b) => b-a).map(score => ({score, count: trace.wanted.filter(v => v === score).length, pass: score >= trace.initial}));
+  return `<div class="table-wrap"><table><thead><tr><th>W layer</th><th>Option count</th><th>Compared with threshold ${trace.initial}</th></tr></thead><tbody>
+    ${rows.map(row => `<tr><td>${row.score}</td><td>${row.count}</td><td>${row.pass ? 'PASS → 下一關' : 'STOP'}</td></tr>`).join('')}
+  </tbody></table></div>`;
+}
+
+function penTable() {
+  return `<div class="table-wrap"><table><thead><tr><th>W layer</th><th>Before U elimination</th><th>Surviving options</th><th>penLayers depth</th></tr></thead><tbody>
+    ${trace.layerTrace.map(row => `<tr><td>${row.score}</td><td>${row.starting.join(', ') || '—'}</td><td>${row.survivors.join(', ') || '—'}</td><td>${row.depth}</td></tr>`).join('')}
+  </tbody></table></div>`;
+}
+
+function distanceTable() {
+  return `<div class="table-wrap"><table><thead><tr><th>W layer</th><th>penLayers</th><th>Squared distance</th><th>Result</th></tr></thead><tbody>
+    ${Object.keys(trace.layerDistances).map(key => `<tr><td>${key}</td><td>${trace.penLayers[key]}</td><td>${trace.layerDistances[key]}</td><td>${Number(key) === trace.chosenWantedLayer ? 'CHOSEN' : '—'}</td></tr>`).join('')}
+  </tbody></table></div>`;
+}
+
+function deepTable() {
+  return `<div class="table-wrap"><table><thead><tr><th>Option</th><th>W</th><th>U</th><th>B</th><th>(maxU−U)²</th><th>B²</th><th>deepwanted</th><th>Result</th></tr></thead><tbody>
+    ${trace.considered.map(i => `<tr><td>${i}</td><td>${trace.wanted[i]}</td><td>${trace.unwanted[i]}</td><td>${trace.blacked[i]}</td><td>${(trace.maximumUnwanted-trace.unwanted[i])**2}</td><td>${trace.blacked[i]**2}</td><td>${trace.deepScores[i] ?? '—'}</td><td>${trace.finalists.includes(i) ? 'FINALIST' : '—'}</td></tr>`).join('')}
+  </tbody></table></div>`;
+}
+
+function executionTable() {
+  return `<div class="table-wrap"><table><thead><tr><th>Branch</th><th>Random draw</th><th>Candidate pool</th><th>Executed</th></tr></thead><tbody>
+    <tr><td>${trace.controlled ? 'Policy-Guided' : 'Baseline Sampling'}</td><td>${trace.policyDraw.toFixed(2)} / 100</td><td>${(trace.controlled ? trace.finalists : trace.wanted.map((_,i)=>i)).join(', ')}</td><td>Option ${trace.selected}</td></tr>
+  </tbody></table></div>`;
+}
+
+function feedbackTable() {
+  return `<div class="table-wrap"><table><thead><tr><th>Merchant</th><th>Shared option</th><th>Current inflow</th><th>Settlement outflow</th><th>Immediate margin effect</th></tr></thead><tbody>
+    ${trace.feedback.map(row => `<tr><td>Merchant ${row.client}</td><td>${trace.selected}</td><td>${row.inflow.toFixed(2)}</td><td>${row.settlementOutflow.toFixed(2)}</td><td>${fmt(row.marginEffect)}</td></tr>`).join('')}
+  </tbody></table></div>`;
+}
+
+function stageVisual() {
+  if (stageIndex === 0) return merchantTable();
+  if (stageIndex === 1) return merchantTable();
+  if (stageIndex === 2) return renderCandidates();
+  if (stageIndex === 3) return betaTable();
+  if (stageIndex === 4) return penTable();
+  if (stageIndex === 5) return distanceTable();
+  if (stageIndex === 6) return deepTable();
+  if (stageIndex === 7) return executionTable();
+  return feedbackTable();
+}
+
+function stageExplanation() {
+  const all = trace.wanted.length;
+  if (stageIndex === 0) return `${trace.merchantTrace.length} 個商戶必須共用 ${all} 個候選方案之一；這一頁會沿用同一個 period ${trace.cycle + 1} snapshot 到最後。`;
+  if (stageIndex === 1) return `${trace.merchantTrace.filter(row => row.spike).length} 個商戶觸發 spike；權重會直接影響後續 W、U、B 的整數累積。`;
+  if (stageIndex === 2) return `每張卡就是一個離散向量 (W,U,B)。W 代表穩定支持、U 代表風險暴露、B 代表針對高風險對象的介入效果；三者沒有先被壓成單一加權分數。`;
+  if (stageIndex === 3) return `targetfunctionbeta 回傳 ${trace.initialRaw.toFixed(3)}，取整數後門檻為 ${trace.initial}；${trace.wanted.filter(v => v >= trace.initial).length}/${all} 個方案保留。`;
+  if (stageIndex === 4) return `penLayers 不是「W 減 U」；它逐層移除高 U，並在整個 W layer 將被清空前停止，保留該層最後可行結構。`;
+  if (stageIndex === 5) return `平方距離選中 W=${trace.chosenWantedLayer} 的整層，共 ${trace.considered.length} 個候選；其他 W layer 到此停止。`;
+  if (stageIndex === 6) return `只在 W=${trace.chosenWantedLayer} 內計算 deepwanted；finalists 為 ${trace.finalists.join(', ')}。B 越高表示越能壓制系統不希望承擔的高風險對象影響。`;
+  if (stageIndex === 7) return `本期 policy draw=${trace.policyDraw.toFixed(2)}，設定值=${Number($('control').value).toFixed(0)}%；因此走 ${trace.controlled ? 'Policy-Guided' : 'Baseline Sampling'} 分支。`;
+  return `Option ${trace.selected} 同時回饋 ${trace.feedback.length} 個商戶；每個商戶的結果金額不同，但使用的是同一個候選 index。`;
+}
+
+function render() {
+  if (!trace) return;
+  const stage = stageDefinitions[stageIndex];
+  renderPipeline(); renderFlowbar();
+  $('eyebrow').textContent = `Stage ${stageIndex + 1} / ${stageDefinitions.length}`;
+  $('stageTitle').textContent = stage.title;
+  $('problem').textContent = stage.problem;
+  $('functionName').textContent = stage.fn;
+  $('solution').textContent = stage.solution;
+  $('outcome').textContent = stage.outcome;
+  $('code').textContent = stage.code;
+  $('visualTitle').textContent = stageIndex === 2 ? 'Candidate vectors' : stage.title + ' 的數字證據';
+  $('visualNote').textContent = `period ${trace.cycle + 1} · executed option ${trace.selected} · ${trace.controlled ? 'Policy-Guided' : 'Baseline Sampling'}`;
+  $('visual').innerHTML = stageVisual();
+  $('explain').textContent = stageExplanation();
+  $('prev').disabled = stageIndex === 0;
+  $('next').disabled = stageIndex === stageDefinitions.length - 1;
+}
+
+$('run').addEventListener('click', runAutopsy);
+$('example').addEventListener('click', () => {
+  $('lower').value='0.0'; $('upper').value='0.03'; $('clients').value='6';
+  $('candidates').value='12'; $('period').value='8'; $('control').value='100'; $('seed').value='16';
+  runAutopsy();
+});
+$('prev').addEventListener('click', () => { if (stageIndex > 0) { stageIndex--; render(); } });
+$('next').addEventListener('click', () => { if (stageIndex < stageDefinitions.length - 1) { stageIndex++; render(); } });
+document.addEventListener('keydown', event => {
+  if (event.target.matches('input')) return;
+  if (event.key === 'ArrowLeft' && stageIndex > 0) { stageIndex--; render(); }
+  if (event.key === 'ArrowRight' && stageIndex < stageDefinitions.length - 1) { stageIndex++; render(); }
+});
+
+runAutopsy();
+</script>
+</body>
+</html>

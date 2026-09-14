@@ -72,6 +72,14 @@ HTML 畫面提供 Target Margin Floor、Target Margin Ceiling、Merchant Count�
 
 每一期代表一個結算窗口：系統比較各 Decision Option 對不同商戶 Settlement Margin 的 Stability Support 與 Risk Exposure，再依 Policy Application Rate 執行政策引導或基準抽樣決策。這項定義可用於支付路由、平台結算、資金分配，以及其他高頻交易風險情境。
 
+## 3. Algorithm Autopsy 逐關解剖版
+
+檔案：[algorithm-autopsy.html](./algorithm-autopsy.html)
+
+由即時 Demo 的控制區可直接進入，也可單獨雙擊開啟。輸入 Target Margin、Merchant Count、Decision Option Count、Trace Period、Policy Application Rate 與 Seed 後，頁面會以同一組可重現的合成數字展示九個決策階段。
+
+每一關都並列呈現：線上系統當下碰到的問題、使用的原始函數／變數、數字證據、候選集合的前後變化，以及該關輸出如何成為下一關輸入。重點包括 `targetfunction()`、`targetfunctionbeta()`、`wanted / unwanted / blacked`、`penLayers`、平方距離選層與 `deepwanted`。Autopsy 頁面將方案數限制在 4–24 個，目的是保持逐項閱讀性；完整即時 Demo 仍支援最多 1000 個方案。
+
 ## 與原始檔案的關係
 
 原始檔案 `profitcontrolsimulator16.py` 沒有被修改。新 Python 檔使用獨立的 `SimulationState`，因此可以由其他 Python 程式匯入：

@@ -89,6 +89,52 @@
     th, td { padding: 8px 9px; border-bottom: 1px solid var(--line); text-align: right; white-space: nowrap; }
     th { color: var(--muted); font-weight: 500; background: #f8fafc; }
     th:first-child, td:first-child { text-align: left; }
+    .figure-wrap { min-width: 0; overflow-x: auto; }
+    .autopsy-figure { display: block; width: 100%; min-width: 540px; height: auto; }
+    .autopsy-figure text { fill: var(--ink); font-family: inherit; font-size: 12px; }
+    .autopsy-figure .muted-text { fill: var(--muted); font-size: 11px; }
+    .autopsy-figure .axis { stroke: #aeb8c5; stroke-width: 1; }
+    .autopsy-figure .gridline { stroke: var(--line); stroke-width: 1; }
+    .autopsy-figure .connector { fill: none; stroke: #9da9b8; stroke-width: 1.4; }
+    .autopsy-figure .connector.active { stroke: var(--blue); stroke-width: 2.4; }
+    .autopsy-figure .node { fill: var(--surface); stroke: #aeb8c5; stroke-width: 1.2; }
+    .autopsy-figure .node.available { fill: var(--green-soft); stroke: var(--green); }
+    .autopsy-figure .node.shortlist { fill: var(--yellow-soft); stroke: var(--yellow); }
+    .autopsy-figure .node.executed { fill: var(--red-soft); stroke: var(--red); stroke-width: 2.3; }
+    .autopsy-figure .bar-w { fill: var(--green); }
+    .autopsy-figure .bar-u { fill: var(--red); }
+    .autopsy-figure .bar-b { fill: var(--black); }
+    .autopsy-figure .bar-neutral { fill: #9ba8b7; }
+    .autopsy-figure .threshold { stroke: var(--yellow); stroke-width: 2; stroke-dasharray: 6 4; }
+    .autopsy-figure .selected-ring { fill: none; stroke: var(--red); stroke-width: 3; }
+    .autopsy-figure .flow-dot { fill: var(--blue); }
+    .autopsy-figure .trace-line { fill: none; stroke: var(--blue); stroke-width: 2.2; stroke-linejoin: round; stroke-linecap: round; }
+    .autopsy-figure .trace-line.spike { stroke: var(--red); }
+    .motion-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 0 0 12px; }
+    .motion-status { color: var(--muted); font-size: 12px; }
+    .elimination-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(88px, 1fr)); gap: 8px; }
+    .elimination-option { min-height: 70px; padding: 9px; border-radius: 9px; background: var(--green-soft); transition: opacity .28s ease, transform .28s ease, background .28s ease; }
+    .elimination-option strong { display: block; font-weight: 600; }
+    .elimination-option.removed { opacity: .22; transform: scale(.94); background: var(--red-soft); }
+    .elimination-option.survivor { background: var(--yellow-soft); }
+    .branch-layout { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 14px; padding: 20px 4px; }
+    .branch-box { min-height: 92px; display: grid; place-items: center; padding: 12px; border-radius: 10px; text-align: center; background: var(--soft); }
+    .branch-box.active { background: var(--yellow-soft); box-shadow: inset 0 0 0 2px var(--yellow); }
+    .draw-meter { min-width: 170px; }
+    .draw-track { position: relative; height: 10px; border-radius: 6px; background: var(--soft); }
+    .draw-cut { position: absolute; inset: 0 auto 0 0; border-radius: 6px 0 0 6px; background: #efd46b; }
+    .draw-marker { position: absolute; top: -6px; width: 3px; height: 22px; background: var(--red); transition: left .7s ease; }
+    .draw-labels { display: flex; justify-content: space-between; margin-top: 7px; color: var(--muted); font-size: 11px; }
+    @keyframes draw-line { from { stroke-dashoffset: 900; } to { stroke-dashoffset: 0; } }
+    @keyframes travel { from { offset-distance: 0%; opacity: 0; } 15% { opacity: 1; } to { offset-distance: 100%; opacity: 1; } }
+    @keyframes grow-x { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+    .animate-line { stroke-dasharray: 900; stroke-dashoffset: 900; animation: draw-line .9s ease forwards; }
+    .bar-grow { transform-box: fill-box; transform-origin: left center; animation: grow-x .65s ease forwards; }
+    .feedback-traveler { offset-path: path('M 450 70 C 450 140 180 145 180 225'); animation: travel .9s ease forwards; }
+    @media (prefers-reduced-motion: reduce) {
+      .animate-line, .feedback-traveler, .bar-grow { animation: none; stroke-dashoffset: 0; }
+      .elimination-option, .draw-marker { transition: none; }
+    }
     .explain { margin-top: 14px; padding: 12px; border-left: 4px solid var(--blue); color: #3e4a5d; background: #edf4ff; line-height: 1.6; }
     .legend { display: flex; flex-wrap: wrap; gap: 14px; margin-top: 12px; color: var(--muted); font-size: 12px; }
     .dot { display: inline-block; width: 10px; height: 10px; margin-right: 5px; border-radius: 2px; vertical-align: -1px; }
@@ -387,7 +433,7 @@ class SimulationState {
           }
         }
       }
-      merchantTrace.push({client, total, threshold, spike, vote: voting[client], rate, lower: this.lower[client], upper: this.upper[client], specificSum});
+      merchantTrace.push({client, total, threshold, spike, vote: voting[client], rate, lower: this.lower[client], upper: this.upper[client], specificSum, historyBefore: historyBefore.slice(-12)});
     }
 
     const maximumWanted = Math.max(...wanted);
@@ -402,6 +448,7 @@ class SimulationState {
       let wantedResult = this.source.filter(candidate => wanted[candidate] === score);
       if (!wantedResult.length) continue;
       const starting = wantedResult.slice();
+      const steps = [];
       penLayers[score] = 0;
       for (let layer = 0; layer < maximumUnwanted; layer++) {
         const copy = wantedResult.slice();
@@ -412,11 +459,12 @@ class SimulationState {
             if (!copy.length) break;
           }
         }
+        steps.push({uLevel: maximumUnwanted - layer, before: wantedResult.slice(), after: copy.slice(), stopped: !copy.length});
         if (!copy.length) break;
         penLayers[score] = layer;
         wantedResult = copy;
       }
-      layerTrace.push({score, starting, survivors: wantedResult.slice(), depth: penLayers[score]});
+      layerTrace.push({score, starting, survivors: wantedResult.slice(), depth: penLayers[score], steps});
     }
     const penKeys = Object.keys(penLayers);
     const layerDistances = {};
@@ -533,6 +581,12 @@ const stageDefinitions = [
 
 let trace = null;
 let stageIndex = 0;
+let motionTimers = [];
+
+function clearMotionTimers() {
+  motionTimers.forEach(timer => clearTimeout(timer));
+  motionTimers = [];
+}
 
 function readConfig() {
   const clients = Math.trunc(Number($('clients').value));
@@ -627,11 +681,84 @@ function merchantTable() {
   </tbody></table></div>`;
 }
 
+function sharedSpaceFigure() {
+  const merchantCount = trace.merchantTrace.length;
+  const optionCount = trace.wanted.length;
+  const merchantGap = merchantCount > 1 ? 300 / (merchantCount - 1) : 0;
+  const optionColumns = Math.min(6, optionCount);
+  const optionRows = Math.ceil(optionCount / optionColumns);
+  const optionGapX = optionColumns > 1 ? 250 / (optionColumns - 1) : 0;
+  const optionGapY = optionRows > 1 ? 210 / (optionRows - 1) : 0;
+  const merchants = trace.merchantTrace.map((row, index) => {
+    const y = 55 + index * merchantGap;
+    return `<path class="connector" d="M 124 ${y} C 230 ${y}, 250 205, 335 205"/>
+      <circle class="node" cx="96" cy="${y}" r="27"/><text x="96" y="${y + 4}" text-anchor="middle">M${row.client}</text>`;
+  }).join('');
+  const options = trace.wanted.map((_, index) => {
+    const column = index % optionColumns;
+    const row = Math.floor(index / optionColumns);
+    const x = 590 + column * optionGapX;
+    const y = optionRows === 1 ? 205 : 100 + row * optionGapY;
+    return `<path class="connector" d="M 535 205 C 560 205, 560 ${y}, ${x - 18} ${y}"/>
+      <circle class="node available" cx="${x}" cy="${y}" r="18"/><text x="${x}" y="${y + 4}" text-anchor="middle">${index}</text>`;
+  }).join('');
+  return `<div class="figure-wrap"><svg class="autopsy-figure" viewBox="0 0 900 410" role="img" aria-label="多個商戶共同連到同一個候選方案空間">
+    <text x="40" y="24">Merchant states</text><text x="373" y="140">One shared decision</text><text x="590" y="58">Finite option space</text>
+    ${merchants}
+    <rect class="node shortlist" x="335" y="165" width="200" height="80" rx="12"/>
+    <text x="435" y="196" text-anchor="middle">Same period</text><text x="435" y="218" text-anchor="middle" class="muted-text">one executed option</text>
+    ${options}
+  </svg></div>`;
+}
+
+function inflowWeightFigure() {
+  const rows = trace.merchantTrace;
+  const maximum = Math.max(1, ...rows.flatMap(row => [row.total, row.threshold * 2]));
+  const height = 52 + rows.length * 42;
+  const plotX = 150;
+  const plotWidth = 690;
+  return `<div class="figure-wrap"><svg class="autopsy-figure" viewBox="0 0 900 ${height}" role="img" aria-label="各商戶當期流入與 targetfunction 兩倍門檻比較">
+    <text x="${plotX}" y="20" class="muted-text">0</text><text x="${plotX + plotWidth}" y="20" text-anchor="end" class="muted-text">${maximum.toFixed(0)}</text>
+    ${rows.map((row, index) => {
+      const y = 42 + index * 42;
+      const barWidth = row.total / maximum * plotWidth;
+      const thresholdX = plotX + row.threshold * 2 / maximum * plotWidth;
+      return `<text x="12" y="${y + 15}">Merchant ${row.client}</text>
+        <rect x="${plotX}" y="${y}" width="${plotWidth}" height="18" rx="4" fill="var(--soft)"/>
+        <rect class="${row.spike ? 'bar-u' : 'bar-w'} bar-grow" x="${plotX}" y="${y}" width="${barWidth}" height="18" rx="4"/>
+        <line class="threshold" x1="${thresholdX}" y1="${y - 5}" x2="${thresholdX}" y2="${y + 24}"/>
+        <text x="${Math.min(plotX + barWidth + 6, 850)}" y="${y + 14}">${row.total.toFixed(0)}${row.spike ? '  SPIKE' : ''}</text>`;
+    }).join('')}
+  </svg></div>${merchantTable()}`;
+}
+
 function betaTable() {
   const rows = [...new Set(trace.wanted)].sort((a,b) => b-a).map(score => ({score, count: trace.wanted.filter(v => v === score).length, pass: score >= trace.initial}));
   return `<div class="table-wrap"><table><thead><tr><th>W layer</th><th>Option count</th><th>Compared with threshold ${trace.initial}</th></tr></thead><tbody>
     ${rows.map(row => `<tr><td>${row.score}</td><td>${row.count}</td><td>${row.pass ? 'PASS → 下一關' : 'STOP'}</td></tr>`).join('')}
   </tbody></table></div>`;
+}
+
+function betaFigure() {
+  const ordered = trace.wanted.map((value, option) => ({value, option})).sort((a,b) => b.value - a.value || a.option - b.option);
+  const maximum = Math.max(1, trace.maximumWanted);
+  const plotX = 54, plotY = 30, plotWidth = 800, plotHeight = 230;
+  const slot = plotWidth / ordered.length;
+  const thresholdY = plotY + plotHeight - trace.initial / maximum * plotHeight;
+  return `<div class="figure-wrap"><svg class="autopsy-figure" viewBox="0 0 900 310" role="img" aria-label="依 wanted 排序並顯示 targetfunctionbeta 起始門檻">
+    <line class="axis" x1="${plotX}" y1="${plotY}" x2="${plotX}" y2="${plotY + plotHeight}"/><line class="axis" x1="${plotX}" y1="${plotY + plotHeight}" x2="${plotX + plotWidth}" y2="${plotY + plotHeight}"/>
+    <line class="threshold" x1="${plotX}" y1="${thresholdY}" x2="${plotX + plotWidth}" y2="${thresholdY}"/>
+    <text x="${plotX + 6}" y="${Math.max(14, thresholdY - 7)}">W threshold = ${trace.initial}</text>
+    ${ordered.map((item, index) => {
+      const height = item.value / maximum * plotHeight;
+      const x = plotX + index * slot + slot * .16;
+      const klass = item.value >= trace.initial ? 'bar-w' : 'bar-neutral';
+      return `<rect class="${klass} bar-grow" x="${x}" y="${plotY + plotHeight - height}" width="${slot * .68}" height="${height}" rx="3"/>
+        <text x="${x + slot * .34}" y="${plotY + plotHeight + 18}" text-anchor="middle" class="muted-text">O${item.option}</text>
+        <text x="${x + slot * .34}" y="${plotY + plotHeight - height - 6}" text-anchor="middle">${item.value}</text>`;
+    }).join('')}
+    <text x="16" y="42" transform="rotate(-90 16 42)" class="muted-text">Stability Support W</text>
+  </svg></div>${betaTable()}`;
 }
 
 function penTable() {
@@ -640,10 +767,35 @@ function penTable() {
   </tbody></table></div>`;
 }
 
+function eliminationFigure() {
+  const row = trace.layerTrace.find(item => item.score === trace.chosenWantedLayer) || trace.layerTrace[0];
+  if (!row) return penTable();
+  return `<div class="motion-row"><button class="button" id="playElimination" type="button">重播 U 分層排除</button><span id="eliminationStatus" class="motion-status">W=${row.score}：準備從最高 U 開始</span></div>
+    <div class="elimination-grid" id="eliminationGrid" data-score="${row.score}">
+      ${row.starting.map(option => `<div class="elimination-option" data-option="${option}"><strong>Option ${option}</strong>U=${trace.unwanted[option]}</div>`).join('')}
+    </div>${penTable()}`;
+}
+
 function distanceTable() {
   return `<div class="table-wrap"><table><thead><tr><th>W layer</th><th>penLayers</th><th>Squared distance</th><th>Result</th></tr></thead><tbody>
     ${Object.keys(trace.layerDistances).map(key => `<tr><td>${key}</td><td>${trace.penLayers[key]}</td><td>${trace.layerDistances[key]}</td><td>${Number(key) === trace.chosenWantedLayer ? 'CHOSEN' : '—'}</td></tr>`).join('')}
   </tbody></table></div>`;
+}
+
+function distanceFigure() {
+  const rows = Object.keys(trace.layerDistances).map(key => ({layer: Number(key), distance: trace.layerDistances[key]})).sort((a,b) => a.layer-b.layer);
+  const maximum = Math.max(1, ...rows.map(row => row.distance));
+  const plotX=70, plotY=28, plotWidth=760, plotHeight=230;
+  const slot = plotWidth / Math.max(1, rows.length);
+  const points = rows.map((row,index) => ({...row, x:plotX+slot*(index+.5), y:plotY+row.distance/maximum*plotHeight}));
+  return `<div class="figure-wrap"><svg class="autopsy-figure" viewBox="0 0 900 310" role="img" aria-label="每個 wanted 層的平方距離比較，最低者被選中">
+    <line class="axis" x1="${plotX}" y1="${plotY}" x2="${plotX}" y2="${plotY+plotHeight}"/><line class="axis" x1="${plotX}" y1="${plotY+plotHeight}" x2="${plotX+plotWidth}" y2="${plotY+plotHeight}"/>
+    ${points.length > 1 ? `<polyline class="trace-line animate-line" points="${points.map(p=>`${p.x},${p.y}`).join(' ')}"/>` : ''}
+    ${points.map(point => `<line class="gridline" x1="${point.x}" y1="${point.y}" x2="${point.x}" y2="${plotY+plotHeight}"/>
+      <circle class="${point.layer===trace.chosenWantedLayer?'node executed':'node shortlist'}" cx="${point.x}" cy="${point.y}" r="13"/>
+      <text x="${point.x}" y="${point.y-19}" text-anchor="middle">d²=${point.distance}</text><text x="${point.x}" y="${plotY+plotHeight+20}" text-anchor="middle">W=${point.layer}</text>`).join('')}
+    <text x="18" y="165" transform="rotate(-90 18 165)" class="muted-text">Squared distance — lower is better</text>
+  </svg></div>${distanceTable()}`;
 }
 
 function deepTable() {
@@ -652,10 +804,37 @@ function deepTable() {
   </tbody></table></div>`;
 }
 
+function deepFigure() {
+  const rows = trace.considered.map(option => ({option, u:(trace.maximumUnwanted-trace.unwanted[option])**2, b:trace.blacked[option]**2, total:trace.deepScores[option] || 0}));
+  const maximum = Math.max(1, ...rows.map(row => row.total));
+  const height = 70 + rows.length * 52;
+  const x = 150, width = 650;
+  return `<div class="figure-wrap"><svg class="autopsy-figure" viewBox="0 0 900 ${height}" role="img" aria-label="選中 wanted 層內各方案的 deepwanted 平方項分解">
+    <text x="${x}" y="22" class="muted-text">(maxU−U)²</text><text x="${x+110}" y="22" class="muted-text">＋ B²</text><text x="${x+width}" y="22" text-anchor="end" class="muted-text">deepwanted total</text>
+    ${rows.map((row,index) => {
+      const y=42+index*52, uWidth=row.u/maximum*width, bWidth=row.b/maximum*width;
+      return `<text x="16" y="${y+18}">Option ${row.option}</text>
+        <rect class="bar-w bar-grow" x="${x}" y="${y}" width="${uWidth}" height="24" rx="4"/>
+        <rect class="bar-b bar-grow" x="${x+uWidth}" y="${y}" width="${bWidth}" height="24" rx="4"/>
+        ${trace.finalists.includes(row.option)?`<rect class="selected-ring" x="${x-4}" y="${y-4}" width="${width+8}" height="32" rx="7"/>`:''}
+        <text x="${Math.min(x+uWidth+bWidth+7,850)}" y="${y+17}">${row.total}</text>`;
+    }).join('')}
+  </svg></div>${deepTable()}`;
+}
+
 function executionTable() {
   return `<div class="table-wrap"><table><thead><tr><th>Branch</th><th>Random draw</th><th>Candidate pool</th><th>Executed</th></tr></thead><tbody>
     <tr><td>${trace.controlled ? 'Policy-Guided' : 'Baseline Sampling'}</td><td>${trace.policyDraw.toFixed(2)} / 100</td><td>${(trace.controlled ? trace.finalists : trace.wanted.map((_,i)=>i)).join(', ')}</td><td>Option ${trace.selected}</td></tr>
   </tbody></table></div>`;
+}
+
+function executionFigure() {
+  const rate = Math.max(0, Math.min(100, Number($('control').value)));
+  return `<div class="branch-layout">
+    <div class="branch-box ${trace.controlled?'active':''}"><strong>Policy-Guided</strong><span>pool: ${trace.finalists.join(', ')}</span></div>
+    <div class="draw-meter"><div class="draw-track"><div class="draw-cut" style="width:${rate}%"></div><div id="drawMarker" class="draw-marker" data-target="${trace.policyDraw}" style="left:0%"></div></div><div class="draw-labels"><span>0</span><span>draw ${trace.policyDraw.toFixed(2)}</span><span>100</span></div></div>
+    <div class="branch-box ${trace.controlled?'':'active'}"><strong>Baseline Sampling</strong><span>pool: all ${trace.wanted.length} options</span></div>
+  </div>${executionTable()}`;
 }
 
 function feedbackTable() {
@@ -664,16 +843,27 @@ function feedbackTable() {
   </tbody></table></div>`;
 }
 
+function feedbackFigure() {
+  const rows=trace.feedback;
+  const gap=rows.length>1?760/(rows.length-1):0;
+  return `<div class="figure-wrap"><svg class="autopsy-figure" viewBox="0 0 900 300" role="img" aria-label="同一個執行方案回饋至全部商戶">
+    <rect class="node executed" x="350" y="25" width="200" height="64" rx="12"/><text x="450" y="53" text-anchor="middle">Executed Option ${trace.selected}</text><text x="450" y="73" text-anchor="middle" class="muted-text">one shared index</text>
+    ${rows.map((row,index)=>{const x=70+index*gap;return `<path class="connector active animate-line" d="M 450 90 C 450 145, ${x} 145, ${x} 213"/>
+      <circle class="node" cx="${x}" cy="235" r="27"/><text x="${x}" y="232" text-anchor="middle">M${row.client}</text><text x="${x}" y="250" text-anchor="middle" class="muted-text">${fmt(row.marginEffect)}</text>`}).join('')}
+    <text x="450" y="286" text-anchor="middle" class="muted-text">The same option becomes every merchant's next-period history</text>
+  </svg></div>${feedbackTable()}`;
+}
+
 function stageVisual() {
-  if (stageIndex === 0) return merchantTable();
-  if (stageIndex === 1) return merchantTable();
+  if (stageIndex === 0) return sharedSpaceFigure();
+  if (stageIndex === 1) return inflowWeightFigure();
   if (stageIndex === 2) return renderCandidates();
-  if (stageIndex === 3) return betaTable();
-  if (stageIndex === 4) return penTable();
-  if (stageIndex === 5) return distanceTable();
-  if (stageIndex === 6) return deepTable();
-  if (stageIndex === 7) return executionTable();
-  return feedbackTable();
+  if (stageIndex === 3) return betaFigure();
+  if (stageIndex === 4) return eliminationFigure();
+  if (stageIndex === 5) return distanceFigure();
+  if (stageIndex === 6) return deepFigure();
+  if (stageIndex === 7) return executionFigure();
+  return feedbackFigure();
 }
 
 function stageExplanation() {
@@ -689,8 +879,64 @@ function stageExplanation() {
   return `Option ${trace.selected} 同時回饋 ${trace.feedback.length} 個商戶；每個商戶的結果金額不同，但使用的是同一個候選 index。`;
 }
 
+function playElimination() {
+  clearMotionTimers();
+  const grid = $('eliminationGrid');
+  const status = $('eliminationStatus');
+  if (!grid || !status) return;
+  const row = trace.layerTrace.find(item => item.score === Number(grid.dataset.score)) || trace.layerTrace[0];
+  if (!row) return;
+  const tiles = [...grid.querySelectorAll('.elimination-option')];
+  tiles.forEach(tile => tile.className = 'elimination-option');
+  status.textContent = `W=${row.score}：${row.starting.length} 個方案開始接受 U 分層排除`;
+  if (!row.steps.length) {
+    tiles.forEach(tile => tile.classList.add('survivor'));
+    status.textContent = `W=${row.score}：沒有需要移除的 U 層`;
+    return;
+  }
+  row.steps.forEach((step, index) => {
+    motionTimers.push(setTimeout(() => {
+      if (step.stopped) {
+        status.textContent = `U=${step.uLevel} 若繼續會清空整層，因此停止並保留上一組候選`;
+      } else {
+        const survivors = new Set(step.after);
+        tiles.forEach(tile => {
+          if (!survivors.has(Number(tile.dataset.option))) tile.classList.add('removed');
+        });
+        status.textContent = `排除 U=${step.uLevel}：剩下 ${step.after.length} 個方案`;
+      }
+      if (index === row.steps.length - 1) {
+        motionTimers.push(setTimeout(() => {
+          const finalSet = new Set(row.survivors);
+          tiles.forEach(tile => { if (finalSet.has(Number(tile.dataset.option))) tile.classList.add('survivor'); });
+          status.textContent += `；本層保留 ${row.survivors.join(', ') || '原候選'}`;
+        }, 380));
+      }
+    }, 260 + index * 620));
+  });
+}
+
+function activateStageMotion() {
+  if (stageIndex === 4) {
+    const button = $('playElimination');
+    if (button) {
+      button.addEventListener('click', playElimination);
+      motionTimers.push(setTimeout(playElimination, 220));
+    }
+  }
+  if (stageIndex === 7) {
+    const marker = $('drawMarker');
+    if (marker) {
+      const move = () => marker.style.left = `${Math.max(0, Math.min(100, Number(marker.dataset.target)))}%`;
+      if (typeof requestAnimationFrame === 'function') requestAnimationFrame(() => requestAnimationFrame(move));
+      else move();
+    }
+  }
+}
+
 function render() {
   if (!trace) return;
+  clearMotionTimers();
   const stage = stageDefinitions[stageIndex];
   renderPipeline(); renderFlowbar();
   $('eyebrow').textContent = `Stage ${stageIndex + 1} / ${stageDefinitions.length}`;
@@ -706,6 +952,7 @@ function render() {
   $('explain').textContent = stageExplanation();
   $('prev').disabled = stageIndex === 0;
   $('next').disabled = stageIndex === stageDefinitions.length - 1;
+  activateStageMotion();
 }
 
 $('run').addEventListener('click', runAutopsy);

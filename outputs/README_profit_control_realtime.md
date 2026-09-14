@@ -80,6 +80,8 @@ HTML 畫面提供 Target Margin Floor、Target Margin Ceiling、Merchant Count�
 
 每一關都並列呈現：線上系統當下碰到的問題、使用的原始函數／變數、數字證據、候選集合的前後變化，以及該關輸出如何成為下一關輸入。重點包括 `targetfunction()`、`targetfunctionbeta()`、`wanted / unwanted / blacked`、`penLayers`、平方距離選層與 `deepwanted`。Autopsy 頁面將方案數限制在 4–24 個，目的是保持逐項閱讀性；完整即時 Demo 仍支援最多 1000 個方案。
 
+每個階段都有專屬靜態或短動畫圖：流量門檻比較、W 分布切線、U 分層排除、平方距離選層、deepwanted 平方項分解、Policy/Baseline 分支與共同結果回饋。動畫只在進入該關或按下重播時執行一次，並支援作業系統的「減少動態效果」設定。
+
 ## 與原始檔案的關係
 
 原始檔案 `profitcontrolsimulator16.py` 沒有被修改。新 Python 檔使用獨立的 `SimulationState`，因此可以由其他 Python 程式匯入：
